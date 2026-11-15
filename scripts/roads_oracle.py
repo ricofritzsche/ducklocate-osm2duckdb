@@ -13,6 +13,9 @@ import sqlite3
 import subprocess
 import xml.etree.ElementTree as ET
 
+DIAGNOSTIC_CODES = ('unsupported_value', 'conditional_value', 'missing_reference',
+                    'invalid_geometry', 'transformation_failed')
+
 
 def decode(source, destination, osmium):
     db = sqlite3.connect(destination)
@@ -21,8 +24,10 @@ def decode(source, destination, osmium):
         CREATE TABLE ways(id INTEGER PRIMARY KEY, version INTEGER, tags TEXT, refs TEXT);
         CREATE TABLE identities(kind TEXT, id INTEGER, PRIMARY KEY(kind,id));
     ''')
-    counts = Counter()
-    maxima = Counter()
+    # These are fixed report fields, including categories absent from the source.
+    counts = Counter(dict.fromkeys(('node', 'way', 'relation', 'selected',
+                                   'excluded_no_highway', 'excluded_area_yes', 'closed'), 0))
+    maxima = Counter(dict.fromkeys(('tags', 'tag_utf8_bytes', 'references_or_members'), 0))
     inventory = {key: Counter() for key in ('highway', 'maxspeed', 'oneway')}
     with Path(destination).with_suffix('.stderr').open('w') as errors:
         with subprocess.Popen([osmium, 'cat', str(source), '-f', 'osm', '--no-progress'],
@@ -115,7 +120,9 @@ def attributes(tags):
     return *values, warnings
 
 
-def features(database):
+def features(database, crs='EPSG:4326'):
+    if crs not in ('EPSG:4326', 'EPSG:3857'):
+        raise ValueError(f'No independent geometry oracle for {crs}')
     with sqlite3.connect(database) as db:
         for ident, version, raw_tags, raw_refs in db.execute('SELECT * FROM ways ORDER BY id'):
             tags, refs = json.loads(raw_tags), json.loads(raw_refs)
@@ -132,6 +139,11 @@ def features(database):
                 x is None or y is None or not math.isfinite(x) or not math.isfinite(y)
                 or not -180 <= x <= 180 or not -90 <= y <= 90 for x, y in points))
             code = 'missing_reference' if missing else 'invalid_geometry' if invalid else None
+            # Spherical Mercator is undefined at either pole. Check its domain
+            # before floating-point log/tan can turn +90 into a large finite Y.
+            # Source failures take precedence, regardless of the output CRS.
+            if code is None and crs == 'EPSG:3857' and any(abs(y) >= 90 for _, y in points):
+                code = 'transformation_failed'
             speed, direction, issues = attributes(tags)
             if code:
                 issues.append(('error', code, 'geometry', None))

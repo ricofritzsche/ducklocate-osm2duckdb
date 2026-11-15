@@ -391,3 +391,84 @@ runtime transformation-operation/grid identities remain as documented in the
 [roads contract](roads-v1.md) and [native foundation](native-foundation.md).
 Downloads, named regions, other profiles, CLI and import operations remain
 unimplemented. `.idea/` and `identifier.db` were preserved.
+
+## Evaluator corrections to 1d2b146: separate verification
+
+Verified locally on 2026-11-15. The two findings concern the evaluation tools,
+not the native extension or the pinned Bremen results above. Fixed count fields
+are now initialized to zero in the independent decoder, reference summary and
+native comparison, including documented diagnostic codes. Geometry expectations
+are derived for the requested CRS: spherical Mercator is undefined at either
+pole, after missing-reference and invalid-source-geometry checks. Optional
+warnings retain their order before the geometry error. Successful-coordinate
+tolerances remain absolute 1e-12 degree / 1e-6 metre, zero relative tolerance.
+
+The [literal XML sources and their derivations](../test/fixtures/roads-evaluator/README.md)
+are independent of Ducklocate's decoder and the synthetic protobuf writer.
+Osmium converts them to temporary PBFs outside Git. Before the evaluator fixes,
+the five initial regression tests failed: zero-selected and node-only empty
+profile results raised `KeyError: 'selected'`; a selected road without relations
+raised `KeyError: 'relation'`; the no-elements oracle omitted all zero count
+fields; the pole input reached EPSG:3857 comparison and disagreed on the expected
+`transformation_failed` issue. These failures used the retained baseline native
+artifact, with no native implementation changes.
+
+After correction, all **six evaluator tests pass**. They exercise full empty
+evaluations with the exact persisted/reopened 19-column schema, zero rows,
+deterministic repeats, both output CRSs and successful fail-mode materialization.
+The pole source succeeds for its two polar lines in EPSG:4326, rejects them with
+NULL geometry in EPSG:3857 report mode and raises `transformation_failed` in
+EPSG:3857 fail mode without publishing a table. Missing-reference and invalid
+source-geometry precedence, ordered warnings, identity, raw tags and resolved
+lineage are checked across CRSs. Deliberately missing/extra native rows still
+fail comparison; duplicate oracle identities still raise an error.
+
+Commands exercised with existing verified local artifacts:
+
+```sh
+configure/venv/bin/python3 scripts/test_roads_evaluator.py /private/tmp/ducklocate-bremen-20261115/baseline/ducklocate.duckdb_extension
+configure/venv/bin/python3 scripts/test_native_checks.py
+configure/venv/bin/python3 scripts/test_roads_review.py build/release/ducklocate.duckdb_extension
+make test_release
+configure/venv/bin/python3 -m py_compile scripts/evaluate_roads.py scripts/roads_oracle.py scripts/roads_eval_native.py scripts/roads_eval_compare.py scripts/test_roads_evaluator.py
+git diff --check
+```
+
+The acceptance guards passed **3 tests** (all four wrong-mode rejections,
+independent control point and all four +/-5 mm discrepancies). The earlier native
+review regressions passed **2 tests**. Release acceptance passed both SQLLogicTest
+files and the complete normal native suite. That existing release artifact is
+the historical `d4d3c44a63d08553b930e1685a92dcb14e35f181a915f8952fbdb58811d7bee0`
+artifact identified above. No Rust, dependency, native build configuration or
+native behavior changed; no native rebuild, Rust checks, debug/probe suites,
+downloads or setup were performed for this correction. The footer digest includes
+Python scripts, but these checks deliberately reuse the identified native bytes.
+
+The complete pinned Bremen evaluation was rerun with the reproduction command
+above, adding the retained baseline `--extension` and `--source-manifest`, and
+using the new output directory
+`/private/tmp/ducklocate-bremen-20261115/evaluation-review-correction`.
+macOS `sandbox-exec` enforced `(deny network*)` for the complete process tree;
+`--require-network-denied` additionally proved EPERM/EACCES. The outer workspace
+sandbox initially refused nested sandbox creation, so the same command ran
+outside that outer sandbox while retaining OS-enforced network denial.
+
+Reconciliation with `evaluation-final/evaluation.json` preserves all 72,749
+selected/successful ways, zero rejections, 359,516 vertices, 431,501 lineage
+entries, 2,605 warned features and warning counts 2,443/314. Both CRS comparisons
+preserve geometry, all feature fields, lineage, diagnostics and schema. Default,
+fail and repeated logical digests remain
+`008c080f2560999056afd50a412d12802a8d663b1e3fd33500307e6b1c3b2fa2`;
+the Mercator logical digest and maximum coordinate errors also match the
+historical run exactly. The only count-report differences are explicit zero
+fields previously omitted. Source, baseline extension, Spatial and Osmium hashes
+are unchanged. This is a correctness rerun, not a controlled performance
+experiment; its timing/resource samples remain in the separate local output.
+The historical benchmark observations above are unchanged.
+
+Full arbitrary transformation-operation/grid provenance remains unresolved;
+no operation metadata was fabricated or comparison weakened. Osmium 1.19.0's
+extended JSON `fileinfo` errors on a completely node-free extent; this real tool
+failure is still propagated. Zero counts for that source are tested directly in
+the oracle, while empty profile results complete the full evaluation. Existing
+platform, resource and scale limitations continue to apply.

@@ -6,7 +6,7 @@ import math
 from pathlib import Path
 import struct
 
-from roads_oracle import features
+from roads_oracle import DIAGNOSTIC_CODES, features
 from roads_eval_native import connect, logical_digest
 
 SCHEMA = [
@@ -22,16 +22,18 @@ SCHEMA = [
 ]
 
 
-def reference_summary(database, cases_path, expected_hash):
+def reference_summary(database, cases_path, expected_hash, crs='EPSG:4326'):
     cases = json.loads(Path(cases_path).read_text()) if cases_path else None
     if cases:
         assert cases['source_sha256'] == expected_hash, 'Cases belong to a different source'
     wanted = {c['id']: c for c in cases['ways']} if cases else {}
     found = []
-    counts, diagnostics = Counter(), Counter()
+    counts = Counter(dict.fromkeys(('selected', 'successful', 'rejected', 'vertices',
+                                   'lineage_entries', 'warning_features'), 0))
+    diagnostics = Counter(dict.fromkeys(DIAGNOSTIC_CODES, 0))
     missing, rejected = {}, {}
     ids = hashlib.sha256()
-    for feature in features(database):
+    for feature in features(database, crs):
         ident, tags = feature['id'], feature['tags']
         ids.update(f'{ident}\n'.encode())
         counts['selected'] += 1
@@ -66,7 +68,8 @@ def coordinates(wkb):
 
 
 def compare(database, reference, spec):
-    counts, diagnostics = Counter(), Counter()
+    counts = Counter(dict.fromkeys(('successful', 'rejected', 'vertices'), 0))
+    diagnostics = Counter(dict.fromkeys(DIAGNOSTIC_CODES, 0))
     max_error = [0., 0.]
     with connect(spec, database) as conn:
         schema = [(r[0], r[1]) for r in conn.execute('DESCRIBE roads').fetchall()]
@@ -75,7 +78,7 @@ def compare(database, reference, spec):
                                 "WHERE extension_name='ducklocate' AND loaded").fetchone()[0]
         cursor = conn.execute('SELECT * FROM roads ORDER BY osm_id')
         batch = iter(())
-        for expected in features(reference):
+        for expected in features(reference, spec['crs']):
             actual = next(batch, None)
             if actual is None:
                 batch = iter(cursor.fetchmany(256))

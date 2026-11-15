@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="ducklocate-evaluator-fixture">
+  <node id="1" version="1" lon="2" lat="49"/>
+  <node id="2" version="2" lon="3" lat="50"/>
+  <way id="100" version="3">
+    <nd ref="2"/><nd ref="1"/><nd ref="2"/>
+    <tag k="highway" v="service"/><tag k="maxspeed" v="30"/>
+  </way>
+</osm>

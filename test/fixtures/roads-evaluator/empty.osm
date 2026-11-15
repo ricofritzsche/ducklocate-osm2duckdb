@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="ducklocate-evaluator-fixture">
+  <node id="1" version="1" lon="2" lat="49"><tag k="highway" v="crossing"/></node>
+</osm>
