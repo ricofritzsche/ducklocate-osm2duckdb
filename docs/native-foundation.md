@@ -73,6 +73,7 @@ make debug
 make test_debug
 make release
 make test_release
+configure/venv/bin/python3 scripts/test_native_checks.py
 configure/venv/bin/python3 scripts/spatial_identity.py
 ```
 
@@ -80,8 +81,13 @@ All of these checks passed on the platform above. SQLLogicTest reports
 `[1/1] test/sql/catalogue.test` and `SUCCESS` for each build. The Rust rule test
 passes; Clippy and formatting are clean. The native harness checks the public
 function set and prints artifact SHA-256, footer identity and probe results.
-Both normal and probe artifacts are tested. Normal artifacts must register only
-the catalogue; probe builds register two extra test-only functions.
+Both normal and probe artifacts are tested. Make passes a required
+`--expect-mode normal` or `--expect-mode probe` argument to the native harness.
+The harness asserts the exact expected function set before any acceptance checks;
+it never infers a mode from the loaded artifact. Normal artifacts must register
+only the catalogue; probe builds register two extra test-only functions.
+`scripts/test_native_checks.py` exercises both mismatch directions for debug and
+release, the recorded control point, and independent ±5 mm coordinate errors.
 
 `make configure` installs the exact engine/runner; the repository additionally
 pins and verifies Python support packages. A partially installed upstream venv
@@ -118,8 +124,8 @@ uses the pinned v2.0.0 wheel. Neither path sets `allow_extensions_metadata_misma
 For an independently enforced offline run on macOS:
 
 ```sh
-/usr/bin/sandbox-exec -p '(version 1)(allow default)(deny network*)' configure/venv/bin/python3 scripts/native_checks.py build/probes/debug/ducklocate.duckdb_extension
-/usr/bin/sandbox-exec -p '(version 1)(allow default)(deny network*)' configure/venv/bin/python3 scripts/native_checks.py build/probes/release/ducklocate.duckdb_extension
+/usr/bin/sandbox-exec -p '(version 1)(allow default)(deny network*)' configure/venv/bin/python3 scripts/native_checks.py build/probes/debug/ducklocate.duckdb_extension --expect-mode probe
+/usr/bin/sandbox-exec -p '(version 1)(allow default)(deny network*)' configure/venv/bin/python3 scripts/native_checks.py build/probes/release/ducklocate.duckdb_extension --expect-mode probe
 ```
 
 Both pass. The enclosing Codex sandbox initially refused nested `sandbox_apply`;
@@ -134,13 +140,16 @@ Artifact hashes identify actual binaries; this foundation claims reproducible
 setup and logical behavior, not byte-identical output across checkout locations
 or builds. The checkout revision can change after the requested local commit.
 
-## Recorded final artifacts
+## Historical foundation artifacts
 
-The final pre-commit verification used footer identity
+The initial foundation verification, committed as `9c203b7`, used footer identity
 `0.1.0-a812d64e4a-18347c7ad7`. All four artifacts passed SQLLogicTest, native
 harness checks and actual v2.0.0 shell loading. Both probe artifacts also passed
-the final OS-enforced offline run. These binaries remain in the ignored build
-directory; `build/verification.json` records shell results and hashes locally.
+the original OS-enforced offline run. These are historical artifact identities;
+rebuilding after review corrections overwrites the build paths with new binaries.
+The original run recorded shell results in the ignored `build/verification.json`.
+Its harness inferred build mode and retained Python's default relative tolerance,
+so it did not establish the stricter acceptance guarantees verified below.
 
 | Artifact | SHA-256 |
 |---|---|
@@ -148,6 +157,60 @@ directory; `build/verification.json` records shell results and hashes locally.
 | `build/release/ducklocate.duckdb_extension` | `ef712273bc5349d9d518f628a9d137b51a49acc2636dd7d84cbe860a9d0e95d9` |
 | `build/probes/debug/ducklocate.duckdb_extension` | `7689a3b5610f5ae7ba7ae6ed5af6231fbbb1b3d6ddcd653a2fc9307893338114` |
 | `build/probes/release/ducklocate.duckdb_extension` | `8b4cc881e604c13dac26431474ee9be1b0dc3938855259da8785fb64cadce6c8` |
+
+## Review correction verification
+
+Verified 15 November 2026 on the same pinned macOS arm64 / DuckDB 2.0.0 baseline.
+No Rust implementation, dependency, public SQL or geometry-validation scope changed.
+The two corrections make build mode explicit and enforce the independent formula's
+**absolute** tolerance (`rel_tol=0.0`, `abs_tol=1e-6` metres).
+
+Exact commands and results:
+
+| Command | Result |
+|---|---|
+| `make configure` | Passed; reused the pinned environment |
+| `cargo fmt --all --check` | Passed |
+| `cargo test --workspace --locked` | Passed; 1 Rust test, no failures |
+| `cargo clippy --workspace --all-targets --locked -- -D warnings` | Passed |
+| `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` | Passed |
+| `make debug` then `make test_debug` | Build passed; SQLLogicTest 1/1 SUCCESS; native normal mode passed |
+| `make release` then `make test_release` | Build passed; SQLLogicTest 1/1 SUCCESS; native normal mode passed |
+| `make debug PROBES=1` then `make test_debug PROBES=1` | Build passed; SQLLogicTest 1/1 SUCCESS; native probe mode passed |
+| `make release PROBES=1` then `make test_release PROBES=1` | Build passed; SQLLogicTest 1/1 SUCCESS; native probe mode passed |
+| `configure/venv/bin/python3 scripts/test_native_checks.py` | 3 tests passed: 4 mode-mismatch cases, recorded-point acceptance, 4 ±5 mm rejection cases |
+| The two network-denying `sandbox-exec` commands above, with `--expect-mode probe` | Debug and release native probe suites passed |
+
+For each of debug and release, normal → normal and probe → probe pass the full
+applicable native suite. Normal → probe and probe → normal exit **1** with
+`native function set mismatch for ... mode` before geometry, catalogue or
+metadata acceptance checks. The mismatches are tested in separate subprocesses,
+so a missing artifact or another error cannot count as the expected rejection.
+To reproduce either negative case directly (each must fail):
+
+```sh
+configure/venv/bin/python3 scripts/native_checks.py build/debug/ducklocate.duckdb_extension --expect-mode probe
+configure/venv/bin/python3 scripts/native_checks.py build/probes/debug/ducklocate.duckdb_extension --expect-mode normal
+```
+
+The actual debug/release transformation remains
+`222638.98158654713, 6274861.394006575` for longitude 2°, latitude 49°, passing
+the independent formula with only 1e-6 m absolute tolerance. The regression calls
+the same formula assertion with +0.005 m and -0.005 m separately in each ordinate;
+all four discrepancies raise `AssertionError`. In particular, the 5 mm Y error
+previously admitted by default relative tolerance is now rejected. The separate
+0.01 m published rounded-point check remains unchanged.
+
+The corrected pre-commit builds use footer identity
+`0.1.0-9c203b7a7f-754bf86283`. These hashes identify rebuilt files at the same
+paths; the original artifact identities remain recorded above as historical results:
+
+| Artifact | SHA-256 |
+|---|---|
+| `build/debug/ducklocate.duckdb_extension` | `3350a393d7f45d5e73ca56ba24c25c53383be91d147e8608a3051f62111b6a59` |
+| `build/release/ducklocate.duckdb_extension` | `0d6a4280bfa0470df84081669ec3dfd832e67072b0d3c5a6948eb8d92311a0d4` |
+| `build/probes/debug/ducklocate.duckdb_extension` | `fb8128009655f7317d457d3315c58e5c43ffe3745dd8de79c7cb54b6f4cee06f` |
+| `build/probes/release/ducklocate.duckdb_extension` | `28b2b82b653406a7a80ec3ec1f39bde03531896d0dcaabcbfe291860aedede2f` |
 
 ## Native boundary probes
 
@@ -235,14 +298,16 @@ Independent control point: PROJ publishes longitude **2**, latitude **49** as
 with **0.01 m** tolerance. Independently evaluating
 `x = 6378137 * radians(2)` and
 `y = 6378137 * ln(tan(pi/4 + radians(49)/2))`
-is checked within **1e-6 m**. These are numerical checks, not accuracy estimates
-for OSM. The non-symmetric point catches axis reversal. Lines/polygons also
+is checked within **1e-6 m** absolute tolerance with `rel_tol=0.0`. These are
+numerical checks, not accuracy estimates for OSM. The non-symmetric point catches axis reversal. Lines/polygons also
 transform through the same core path. Invalid/empty/NULL CRS, unsupported valid
 CRS and missing local Spatial resources fail explicitly. A deliberately invalid
 latitude produces infinities in raw Spatial; the shared path detects non-finite
 output bounds and returns `transformation_failed` instead of emitting them.
-Empty geometries remain valid. Arbitrary malformed/non-finite geometry validation
-and future profile-level fail/report behavior need their own qualification.
+Empty geometries remain valid. Full arbitrary-geometry validation, including
+malformed/non-finite vertex handling, and profile-level fail/report behavior are
+explicitly deferred to the roads milestone; this harness correction does not
+implement or qualify them.
 
 Identities actually obtained:
 

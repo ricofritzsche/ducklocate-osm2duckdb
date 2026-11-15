@@ -3,19 +3,19 @@
 Every connection disables automatic installation/loading. Spatial is an explicit,
 hash-verified local artifact. Run under network denial for the offline check.
 """
+import argparse
 import concurrent.futures
 import hashlib
 import json
 import math
 from pathlib import Path
 import struct
-import sys
 import tempfile
 
 import duckdb
 
 ROOT = Path(__file__).resolve().parents[1]
-ARTIFACT = Path(sys.argv[1]).resolve()
+ARTIFACT: Path
 SPATIAL = ROOT / '.cache/spatial/spatial.duckdb_extension'
 SPATIAL_SHA = '212ca75890f576bec4a9ea71f5a10320581fe9886afceb05b1d47944ebcf03f4'
 CONFIG = {
@@ -47,6 +47,12 @@ def fails(conn, query, message):
         assert message.lower() in str(error).lower(), (query, error)
     else:
         raise AssertionError(f'Expected error: {query}')
+
+
+def assert_mercator_formula(x, y):
+    # Independent spherical Mercator formula, WGS84 a=6378137 m, 1 micrometre.
+    assert math.isclose(x, 6378137 * math.radians(2), rel_tol=0.0, abs_tol=1e-6)
+    assert math.isclose(y, 6378137 * math.log(math.tan(math.pi/4 + math.radians(49)/2)), rel_tol=0.0, abs_tol=1e-6)
 
 
 def geometry_checks(conn):
@@ -108,9 +114,7 @@ def geometry_checks(conn):
     x, y, crs = conn.execute(f'SELECT ST_X(geometry), ST_Y(geometry),geometry_crs FROM {projected} WHERE id=0').fetchone()
     # Published PROJ example rounds to 2 decimals: tolerance 1 cm (not source accuracy).
     assert abs(x - 222638.98) < 0.01 and abs(y - 6274861.39) < 0.01, (x, y)
-    # Independent spherical Mercator formula, WGS84 a=6378137 m, 1 micrometre.
-    assert math.isclose(x, 6378137 * math.radians(2), abs_tol=1e-6)
-    assert math.isclose(y, 6378137 * math.log(math.tan(math.pi/4 + math.radians(49)/2)), abs_tol=1e-6)
+    assert_mercator_formula(x, y)
     assert crs == 'EPSG:3857'
     fails(conn, "SELECT * FROM ducklocate_probe_rows(1, crs := 'EPSG:3857', spatial_path := '/missing/spatial.duckdb_extension')", 'not found')
     # Hand-written WKB LineString and polygon ring exercise non-point geometry.
@@ -187,14 +191,26 @@ def metadata_checks():
 
 
 def main():
-    assert duckdb.__version__ == '2.0.0'
-    identity = metadata_checks()
+    global ARTIFACT
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('artifact', type=Path)
+    parser.add_argument('--expect-mode', choices=['normal', 'probe'], required=True)
+    args = parser.parse_args()
+    ARTIFACT = args.artifact.resolve()
+    probes = args.expect_mode == 'probe'
     with connect() as conn:
+        public = {r[0] for r in conn.execute("SELECT function_name FROM duckdb_functions() WHERE function_name LIKE 'ducklocate_%'").fetchall()}
+        expected = {'ducklocate_profiles'}
+        if probes:
+            expected.update({'ducklocate_probe_rows', 'ducklocate_probe_transaction'})
+        assert public == expected, (
+            f'native function set mismatch for {args.expect_mode} mode: '
+            f'expected {sorted(expected)}, got {sorted(public)}'
+        )
+        assert duckdb.__version__ == '2.0.0'
+        identity = metadata_checks()
         assert conn.execute('SELECT version(), platform FROM pragma_platform()').fetchone() == ('v2.0.0', 'osx_arm64')
         assert scalar(conn, 'SELECT count(*) FROM ducklocate_profiles()') == 0
-        public = {r[0] for r in conn.execute("SELECT function_name FROM duckdb_functions() WHERE function_name LIKE 'ducklocate_%'").fetchall()}
-        probes = 'ducklocate_probe_rows' in public
-        assert public == ({'ducklocate_profiles','ducklocate_probe_rows','ducklocate_probe_transaction'} if probes else {'ducklocate_profiles'}), public
         result = {'artifact': str(ARTIFACT), 'sha256': hashlib.sha256(ARTIFACT.read_bytes()).hexdigest(), 'probes': probes, 'identity': identity}
         if probes:
             assert hashlib.sha256(SPATIAL.read_bytes()).hexdigest() == SPATIAL_SHA

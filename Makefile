@@ -20,6 +20,7 @@ include extension-ci-tools/makefiles/c_api_extensions/rust.Makefile
 
 # Native-only adaptation of the pinned template; lockfile required for every build.
 TARGET_INFO+=--package ducklocate --locked $(if $(PROBES),--features foundation-probes)
+NATIVE_TEST_MODE=$(if $(PROBES),probe,normal)
 
 # Keep synthetic symbols out of the deliverable artifacts.
 ifneq ($(PROBES),)
@@ -44,7 +45,7 @@ debug: build_extension_library_debug build_extension_with_metadata_debug
 release: build_extension_library_release build_extension_with_metadata_release
 
 test_debug: test_extension_debug
-	$(PYTHON_VENV_BIN) scripts/native_checks.py $(EXTENSION_BUILD_PATH)/debug/$(EXTENSION_FILENAME)
+	$(PYTHON_VENV_BIN) scripts/native_checks.py $(EXTENSION_BUILD_PATH)/debug/$(EXTENSION_FILENAME) --expect-mode $(NATIVE_TEST_MODE)
 
 test_release: test_extension_release
-	$(PYTHON_VENV_BIN) scripts/native_checks.py $(EXTENSION_BUILD_PATH)/release/$(EXTENSION_FILENAME)
+	$(PYTHON_VENV_BIN) scripts/native_checks.py $(EXTENSION_BUILD_PATH)/release/$(EXTENSION_FILENAME) --expect-mode $(NATIVE_TEST_MODE)
