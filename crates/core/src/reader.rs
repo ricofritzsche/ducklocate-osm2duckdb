@@ -56,8 +56,16 @@ fn transformer(context: &Context, crs: OutputCrs) -> Result<Option<Connection>> 
     if crs == OutputCrs::Wgs84 {
         return Ok(None);
     }
-    let directory = context
-        .config()?
+    let config = context.config()?;
+    // This integration needs its own extension load; do not bypass caller policy,
+    // even if Spatial was already loaded in the caller or the source is empty.
+    let external_access = config.get_value("enable_external_access")?.0;
+    if external_access.get::<bool>()? != Some(true) {
+        return Err(Error::invalid_input(
+            "EPSG:3857 requires loading Spatial; caller has enable_external_access=false",
+        ));
+    }
+    let directory = config
         .get_value("extension_directory")?
         .0
         .get::<String>()?

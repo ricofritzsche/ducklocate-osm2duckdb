@@ -84,3 +84,19 @@ query IT
 SELECT osm_id,typeof(geometry) FROM sql_roads;
 ----
 301	GEOMETRY
+
+statement error
+SELECT * FROM ducklocate_read('test/fixtures/roads/duplicate-dense.osm.pbf');
+----
+invalid PBF: duplicate singular field
+
+statement error
+SELECT * FROM ducklocate_read('test/fixtures/roads/duplicate-dense.osm.pbf',on_error:='report');
+----
+invalid PBF: duplicate singular field
+
+query ITII
+SELECT osm_id,status,source_refs[2].osm_id,source_refs[3].osm_id
+FROM ducklocate_read('test/fixtures/roads/split-dense.osm.pbf');
+----
+303	ok	1	3

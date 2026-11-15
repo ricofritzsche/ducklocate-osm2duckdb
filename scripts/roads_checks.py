@@ -10,7 +10,7 @@ import tempfile
 import threading
 import time
 
-from make_roads_fixtures import encode, frame, blob, integer, packed
+from make_roads_fixtures import encode, frame, blob, integer, packed, dense_field_fixtures
 
 ROOT = Path(__file__).resolve().parents[1]
 FIX = ROOT / 'test/fixtures/roads'
@@ -333,7 +333,37 @@ def lifecycle_checks(connect, directory, identity):
     assert set(Path(tempfile.gettempdir()).glob('ducklocate-*')) == baseline
 
 
+def dense_field_checks(conn):
+    for name, data in dense_field_fixtures().items():
+        assert (FIX / (name + '.osm.pbf')).read_bytes() == data, name
+    for mode in ['fail', 'report']:
+        r, = rows(conn, read('split-dense', f",on_error := '{mode}'"))
+        assert r['status'] == 'ok' and r['issues'] == []
+        assert coords(r['geometry']) == [(2.,49.),(3.,50.)]
+        assert r['source_refs'] == [ref('way',303),ref('node',1),ref('node',3)]
+        failed(conn, 'SELECT * FROM ' + read('duplicate-dense', f",on_error := '{mode}'"),
+               'invalid PBF: duplicate singular field')
+
+
+def restricted_crs_checks(connect):
+    # Each connection allowlists only its input; even an empty source must fail
+    # before the isolated transform session can look up/load installed Spatial.
+    for name, count in [('valid',14), ('empty',0)]:
+        with connect() as conn:
+            conn.execute(f'SET allowed_paths=[{literal(FIX / (name + ".osm.pbf"))}]')
+            conn.execute('SET enable_external_access=false')
+            conn.execute('SET lock_configuration=true')
+            failed(conn, 'LOAD spatial', 'Loading external extensions is disabled')
+            for mode in ['fail', 'report']:
+                assert conn.execute(f'SELECT count(*) FROM {read(name, f",on_error := {literal(mode)}")}').fetchone() == (count,)
+                fn = read(name, f",crs := 'EPSG:3857',on_error := '{mode}'")
+                failed(conn, 'SELECT * FROM ' + fn,
+                       'EPSG:3857 requires loading Spatial; caller has enable_external_access=false')
+            assert conn.execute("SELECT current_setting('enable_external_access'), current_setting('lock_configuration')").fetchone() == (False,True)
+
+
 def security_checks(connect):
+    restricted_crs_checks(connect)
     with connect() as conn:
         conn.execute("SET disabled_filesystems='LocalFileSystem'")
         failed(conn,'SELECT * FROM '+read(),'disabled')
@@ -375,6 +405,7 @@ def run(connect, identity):
             with connect() as conn:
                 hash = contract_checks(conn,identity)
                 error_checks(conn,directory)
+                dense_field_checks(conn)
                 crs_checks(conn)
             lifecycle_checks(connect,directory,identity)
             security_checks(connect)

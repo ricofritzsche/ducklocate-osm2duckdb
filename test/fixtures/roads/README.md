@@ -7,6 +7,27 @@ small independent protobuf writer and Python zlib. It does not import reader cod
 or generate acceptance answers. Ways precede nodes in separate blocks. Negative
 reference deltas, raw/zlib blobs and dense/ordinary nodes are exercised.
 
+The two additional `duplicate-dense` and `split-dense` PBFs are hand-encoded by
+`dense_field_fixtures()` in the same independent writer, without source JSON.
+They share way 303, highway=track, refs [1,3], and a string table. The first
+dense payload has ID delta [1], latitude delta [490000000] and longitude delta
+[20000000]. The second has ID deltas [2,1] and latitude/longitude deltas
+[10000000,10000000]. Granularity is 100 nanodegrees; all node versions are absent.
+
+- `duplicate-dense` places those payloads in **two occurrences of PrimitiveGroup
+  field 2**. The documented singular-field policy requires a statement error in
+  both modes. Resetting deltas incorrectly yields nodes 1=(2,49), 2=(1,1),
+  3=(2,2), hence a plausible but wrong road LINESTRING(2 49,2 2) with status ok.
+- `split-dense` concatenates the same payload bytes inside **one field 2**.
+  Its repeated packed ID/latitude/longitude/tag fields are legitimate. Accumulating
+  deltas across segments yields nodes 1=(2,49), 3=(3,50), 4=(4,51); way 303 must
+  be LINESTRING(2 49,3 50), lineage [way303,node1,node3], status ok in both modes.
+
+Native acceptance compares both tracked files with the independent writer's
+bytes without rewriting them. SQLLogicTest checks duplicate rejection in both
+modes and the split-field control; native checks also assert exact coordinates
+and lineage. The existing ordinary/dense and metadata fixtures remain in use.
+
 Independent derivation:
 
 - valid: 16 ways, two exclusions (102 has area=yes, 103 lacks highway), so 14

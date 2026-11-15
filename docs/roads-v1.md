@@ -153,6 +153,10 @@ Raw and zlib blobs and ordinary/dense nodes are supported. Other compression,
 LocationsOnWays and unknown required features fail. Unknown optional protobuf
 fields are ignored; duplicate singular protobuf fields and malformed lengths,
 references and deltas fail explicitly.
+In particular, PrimitiveGroup field 2 is one optional DenseNodes message;
+duplicate occurrences fail the statement in both error modes rather than being
+merged or decoded with reset deltas. Repeated numeric fields, including multiple
+packed segments within one DenseNodes message, remain supported.
 These limits deliberately exclude some valid large extracts/records.
 
 Rust holds one bounded block, bounded per-element buffers and one feature at a
@@ -169,7 +173,15 @@ bounded callback and may delay cancellation. No prompt cancellation latency clai
 
 For EPSG:3857 an isolated in-memory DuckDB session loads **already installed**
 Spatial from the caller's extension_directory, with autoload/autoinstall disabled,
-then disables external access. It verifies Spatial revision a3dbcd1781 and the
+then disables external access. This integration requires a separate extension
+load: when the caller has `enable_external_access=false`, EPSG:3857 fails before
+looking up/loading Spatial. This is a statement error in both modes, even for
+empty sources or when Spatial is already loaded in the caller. An input allowlist
+does not authorize loading Spatial; locking configuration does not change this
+restriction. Default EPSG:4326 requires no Spatial load and remains available for
+allowlisted sources under disabled external access and locked configuration.
+The reader neither weakens caller settings nor shares a process-global transformer.
+It verifies Spatial revision a3dbcd1781 and the
 runtime/compiled PROJ 9.1.1 identities. Install the pinned local Spatial artifact explicitly
 before use. There is no network or grid acquisition in the reader. Missing Spatial
 or transformation configuration is a statement error in either mode.

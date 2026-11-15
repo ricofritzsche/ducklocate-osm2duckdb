@@ -184,7 +184,13 @@ SQL
 
 The reader's isolated transformation session inherits `extension_directory`,
 disables automatic installation/loading, loads installed Spatial, then disables
-external access. No grids or network acquisition occur during reads. The pole
+external access. Because this integration requires its own extension load,
+EPSG:3857 requires the caller's `enable_external_access=true`. With external
+access disabled, it fails before looking up/loading Spatial in both error modes,
+including for empty sources and when Spatial was previously loaded in the caller.
+Path allowlisting and locked configuration do not grant permission to load an
+extension. Default EPSG:4326 reads remain available for allowlisted inputs.
+No grids or network acquisition occur during reads. The pole
 latitudes are rejected for Web Mercator; a transformation failure never produces
 unchanged coordinates labelled with the target CRS. Attribute units (km/h) do not
 change with geometry CRS. Web Mercator metres are not accurate ground distances.

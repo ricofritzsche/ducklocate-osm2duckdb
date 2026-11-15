@@ -1,5 +1,9 @@
 # Roads vertical slice verification
 
+The original milestone evidence below is historical. The final section records
+the subsequent corrections to the two review findings at `a8946c6`; its artifact
+identities are separate from the original results.
+
 Verified locally on 2026-11-15, macOS arm64. This milestone retains DuckDB **2.0.0**,
 Rust **1.98.1**, `duckdb-neo` **0.20000.2**, C API v2 `C_STRUCT_UNSTABLE`, platform
 `osx_arm64`, and the existing footer/version/platform/signature acceptance guards.
@@ -78,7 +82,7 @@ checked against independent spherical Mercator equations with absolute tolerance
 accuracy. The embedded database identity and unresolved operation/grid provenance
 remain as described in [the foundation evidence](native-foundation.md#coordinate-path-and-provenance).
 
-## Verified artifact identities
+## Historical roads artifact identities
 
 All four packaged artifacts report `0.1.0-77be3fba8f-34169724e7`. The revision prefix is
 the parent checkout revision; the digest identifies the uncommitted build inputs,
@@ -140,3 +144,123 @@ termination can leave OS temp files. Empty materializations need caller-retained
 metadata. Complete runtime transformation operation/grid provenance is unresolved.
 The CLI, downloads, regions, other profiles, incremental updates, routing and
 `ducklocate_import` remain outside this milestone.
+
+## Review corrections to a8946c6
+
+Verified locally on 2026-11-15 against the same pinned runtime and platform.
+The SQL signatures, 19-column schema, profiles and foundation acceptance guards
+remain unchanged. No downloads or additional product operations were introduced.
+
+### Regressions before the corrections
+
+Before editing either Rust file, `make debug` rebuilt the original Rust code with
+the new regression harness. That packaged baseline reported
+`0.1.0-a8946c61ca-8704c97474`, SHA-256
+`36827f1a380813f0ea26898f399a072a2a3f991947317933bdbcec3d9a38f2ec`.
+Its parent revision is `a8946c6`; the digest includes the uncommitted test changes.
+The baseline artifact was retained outside Git for the comparison:
+
+```sh
+configure/venv/bin/python3 scripts/test_roads_review.py /tmp/ducklocate-review-baseline/ducklocate.duckdb_extension
+```
+
+Result: **2 tests failed**, each because a required statement error was absent.
+Additional direct queries against this same baseline established the full matrix:
+
+- Allowlist only the individual source, set `enable_external_access=false`, then
+  `lock_configuration=true`. The caller's `LOAD spatial` failed with
+  `Loading external extensions is disabled through configuration`, but
+  EPSG:3857 reads succeeded: 14 rows for `valid`, zero rows for `empty`, in both
+  `fail` and `report` modes (four unintended successes).
+- `duplicate-dense` returned way 303 with status `ok` and
+  LINESTRING(2 49,2 2) in both modes. The control `split-dense`, containing the
+  same payload bytes inside one DenseNodes message, returned
+  LINESTRING(2 49,3 50) in both modes. The independently derived delta arithmetic
+  is recorded in [the fixture note](../test/fixtures/roads/README.md).
+
+### Corrected observable contract
+
+The transformation path reads the caller's external-access setting before
+looking up the extension directory or creating/loading the internal instance.
+When disabled it raises
+`EPSG:3857 requires loading Spatial; caller has enable_external_access=false`.
+This is a statement error for both modes, including an empty source. Default
+EPSG:4326 reads still return 14/zero rows for the respective allowlisted inputs
+under the same locked configuration. The tests also assert that external access
+stays disabled and configuration stays locked. The current integration requires
+its own Spatial load even if the caller already loaded Spatial; the restriction
+is documented in [the contract](roads-v1.md#execution-security-and-resource-limits)
+and README. There is no process-global transformation engine.
+
+PrimitiveGroup field 2 now uses the existing singular-field accessor: duplicates
+raise `invalid PBF: duplicate singular field` in both modes. No protobuf message
+merging is implemented. The paired legal split-packed fixture still has the
+independently expected coordinates, status, empty issues and lineage in both
+modes. Existing ordinary/dense-node, metadata and numeric-array tests remain.
+Both regressions run in every normal/probe native suite; SQLLogicTest additionally
+checks duplicate rejection in both modes and the legal split-field control.
+
+### Correction verification and artifact identities
+
+All of these commands passed from the repository root:
+
+```sh
+cargo fmt --all --check
+cargo test --workspace --locked
+cargo test --workspace --all-features --locked
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+make debug
+make test_debug
+make release
+make test_release
+make debug PROBES=1
+make test_debug PROBES=1
+make release PROBES=1
+make test_release PROBES=1
+configure/venv/bin/python3 scripts/test_roads_review.py build/debug/ducklocate.duckdb_extension
+configure/venv/bin/python3 scripts/test_native_checks.py
+```
+
+Both Cargo test configurations passed **5 tests**, with no ignored or failed
+tests. Each of the four native test targets passed **2 SQLLogicTest files**
+(`catalogue.test`, `roads.test`) and the complete native acceptance suite.
+The targeted review suite passed **2 tests**, versus its two baseline failures.
+The acceptance-guard suite passed **3 tests**, retaining all four wrong-mode
+rejections and all four independent +/-5 mm discrepancy rejections. Footer,
+engine/platform, unsigned-loading and exact function-set checks remain enabled.
+
+All four complete native suites also passed with OS-enforced network denial:
+
+```sh
+/usr/bin/sandbox-exec -p '(version 1)(allow default)(deny network*)' configure/venv/bin/python3 scripts/native_checks.py build/debug/ducklocate.duckdb_extension --expect-mode normal
+/usr/bin/sandbox-exec -p '(version 1)(allow default)(deny network*)' configure/venv/bin/python3 scripts/native_checks.py build/release/ducklocate.duckdb_extension --expect-mode normal
+/usr/bin/sandbox-exec -p '(version 1)(allow default)(deny network*)' configure/venv/bin/python3 scripts/native_checks.py build/probes/debug/ducklocate.duckdb_extension --expect-mode probe
+/usr/bin/sandbox-exec -p '(version 1)(allow default)(deny network*)' configure/venv/bin/python3 scripts/native_checks.py build/probes/release/ducklocate.duckdb_extension --expect-mode probe
+```
+
+The workspace sandbox initially refused to create the nested macOS sandbox
+(`sandbox_apply: Operation not permitted`). The same commands ran successfully
+outside that outer sandbox, retaining the explicit `deny network*` policy.
+Permitted EPSG:3857 reads succeeded in every run, using the existing local Spatial
+artifact. Its hash and Spatial/PROJ version checks remain unchanged. Road vertices
+retain absolute **1e-6 m** tolerance with **zero relative tolerance** against the
+independent Mercator equations. Probe runs again measured the control point
+`(222638.98158654713, 6274861.394006575)`.
+
+The corrected artifacts all report `0.1.0-a8946c61ca-f0cb2a6e5d`. As before,
+the revision identifies the parent checkout and the digest identifies the actual
+uncommitted build inputs; these are local verification artifacts, not a claim that
+the footer names the subsequent correction commit.
+
+| Corrected artifact | SHA-256 |
+|---|---|
+| normal debug | `3fc5675c817627c324fb25f6080bbed0eb25f25c69a6f485816681cedf1fd899` |
+| normal release | `ff9827eef88a1058784ceab968e40d4f21488c9b5c9af826b41640c95f571d05` |
+| probe debug | `402fe4fe69d5e04afd824e4c79d092b39a9fb07904233f72ecaeed73081e76db` |
+| probe release | `4c97e9f1cb4d9733ef52d54c9d996a2d355b5d48dd135f18dc5b0a97b3fa4285` |
+
+Diff whitespace checks and updated documentation relative-link target checks
+passed. No issues remain for these two findings. The earlier platform, scale,
+resource-accounting and transformation-provenance limits remain; no additional
+support or performance claim is made by this correction.

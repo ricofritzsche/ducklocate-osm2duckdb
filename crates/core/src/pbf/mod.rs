@@ -228,8 +228,8 @@ pub(crate) fn block(data: &[u8], mut emit: impl FnMut(Element) -> Result<()>) ->
                 y: grid.coordinate(zigzag(node.required_int(8)?), grid.lat)?,
             })?;
         }
-        for raw in group.values(2) {
-            dense(bytes(raw)?, &table, &grid, &mut emit)?;
+        if let Some(raw) = group.bytes(2)? {
+            dense(raw, &table, &grid, &mut emit)?;
         }
         for raw in group.values(3) {
             let way = Message::parse(bytes(raw)?)?;

@@ -94,9 +94,24 @@ def encode(source):
     return result
 
 
+def dense_field_fixtures():
+    """Hand-encoded singular-message regression and legal split-packed control."""
+    header = frame('OSMHeader', blob(4, 'OsmSchema-V0.6') + blob(4, 'DenseNodes'), False)
+    table = blob(1, blob(1, '') + blob(1, 'highway') + blob(1, 'track'))
+    way = integer(1, 303) + packed(2, [1]) + packed(3, [2]) + packed(8, [2, 4])
+    first = packed(1, [2]) + packed(8, [980000000]) + packed(9, [40000000]) + packed(10, [0])
+    second = packed(1, [4, 2]) + packed(8, [20000000, 20000000]) + packed(9, [20000000, 20000000]) + packed(10, [0, 0])
+    return {
+        'duplicate-dense': header + frame('OSMData', table + blob(2, blob(3, way) + blob(2, first) + blob(2, second))),
+        'split-dense': header + frame('OSMData', table + blob(2, blob(3, way) + blob(2, first + second))),
+    }
+
+
 def main():
     for path in sorted(FIXTURES.glob('*.json')):
         path.with_suffix('.osm.pbf').write_bytes(encode(json.loads(path.read_text())))
+    for name, data in dense_field_fixtures().items():
+        (FIXTURES / (name + '.osm.pbf')).write_bytes(data)
 
 
 if __name__ == '__main__':
