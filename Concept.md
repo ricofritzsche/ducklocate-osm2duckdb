@@ -81,8 +81,13 @@ contains the interface proposal. SQL offers profile discovery, provider catalogu
 lookup, explicit downloads, local source inspection, profile reads and a convenience
 import operation. The CLI builds a database containing selected profile tables and
 source/profile metadata. Both interfaces use the same projection rules and snapshot
-identity. DuckDB owns catalogue and transaction behavior; native integration,
-atomic import and complete individual profile contracts remain unverified.
+identity. DuckDB owns catalogue and transaction behavior. Native loading, the
+empty catalogue, geometry/nested output and the initial CRS path are verified in
+[the development note](docs/native-foundation.md). The C API callback context has
+no caller-transaction SQL execution handle. The proposed CALL import stays
+unimplemented; its atomicity contract must be preserved. A test-only query-pragma
+SQL expansion demonstrates a possible alternative without committing to a public
+interface change. Complete profile contracts remain future work.
 
 Keep public signatures and examples in the README rather than duplicating them
 here. Design work may refine the proposal; record settled scope choices here and
@@ -99,10 +104,11 @@ Resolve these as concrete tasks need them, with a short rationale and evidence:
 - Table keys, shared source storage and dependency indexes.
 - External profile format and schema/profile compatibility policy.
 - Incremental updates, deletion handling and publication semantics.
-- Rust binding and exact toolchain pins, crate layout and tested platforms.
+- Broader platforms and future embedded CLI packaging beyond the pinned macOS arm64 native foundation.
 - Software license and community-distribution route. Software and OSM data licensing are separate.
 
-The README's SQL and CLI interfaces remain proposals. No supported-platform matrix or
+The README distinguishes the implemented native foundation and empty profile
+catalogue from the remaining proposed SQL and CLI interfaces. No supported-platform matrix or
 performance target has been fixed by this document. Public descriptions state
 the product's purpose; verified support and current limitations belong in
 development and release documentation.

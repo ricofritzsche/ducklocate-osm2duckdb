@@ -1,0 +1,11 @@
+[package]
+name = "ducklocate-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[features]
+foundation-probes = []
+
+[dependencies]
+duckdb-neo.workspace = true

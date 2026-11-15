@@ -1,0 +1,9 @@
+/target/
+/build/
+/configure/
+/.cache/
+/duckdb_unittest_tempdir/
+*.duckdb
+*.duckdb.wal
+*.duckdb_extension
+__pycache__/

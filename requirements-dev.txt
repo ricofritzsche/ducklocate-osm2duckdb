@@ -1,0 +1,5 @@
+# Runner Git revision is pinned by extension-ci-tools at 2ac8dbc012ddbd96a57dca37784fd8ee3c0eb021.
+duckdb==2.0.0
+packaging==26.3
+termcolor==3.3.0
+duckdb_sqllogictest @ git+https://github.com/duckdb/duckdb-sqllogictest-python@2ac8dbc012ddbd96a57dca37784fd8ee3c0eb021

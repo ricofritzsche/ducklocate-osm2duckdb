@@ -1,0 +1,32 @@
+require ducklocate
+
+query I
+SELECT count(*) FROM ducklocate_profiles();
+----
+0
+
+query TT
+SELECT column_name, column_type FROM (DESCRIBE SELECT * FROM ducklocate_profiles());
+----
+profile	VARCHAR
+profile_version	VARCHAR
+schema_version	VARCHAR
+is_default	BOOLEAN
+description	VARCHAR
+geometry_types	VARCHAR[]
+
+query I
+SELECT count(*) FROM ducklocate_profiles() a CROSS JOIN ducklocate_profiles() b;
+----
+0
+
+statement error
+SELECT * FROM ducklocate_profiles(NULL);
+----
+No function matches
+
+query I
+SELECT count(*) FROM duckdb_functions()
+WHERE function_name IN ('ducklocate_read', 'ducklocate_source', 'ducklocate_import', 'ducklocate_download', 'ducklocate_regions');
+----
+0

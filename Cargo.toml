@@ -1,0 +1,17 @@
+[workspace]
+members = ["crates/core", "crates/native"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98"
+
+[workspace.dependencies]
+# Official template a679601 uses this exact C API v2 binding.
+duckdb-neo = { version = "=0.20000.2", default-features = false }
+ducklocate-core = { path = "crates/core" }
+
+[profile.release]
+lto = true
+strip = true

@@ -8,13 +8,61 @@ Choose a local OSM file or explicitly download a named region. Select a projecti
 profile and work through SQL or the `osm2duckdb` command-line tool. Both interfaces
 use the same Rust projection code, profile definitions and output schemas.
 
-> **API design:** This README proposes the SQL and CLI contracts for DuckDB 2.0.
-> The extension and CLI are not implemented yet; the examples describe the interfaces
-> to build. Native loading, geometry interoperability and download execution still
-> require integration verification. No community installation is available.
+> **Implementation status:** The native foundation is implemented and verified on
+> macOS arm64 with DuckDB **2.0.0**. The only public function is
+> `ducklocate_profiles()`, returning the documented schema and **zero rows**.
+> No OSM profiles, parsing, downloads, imports or CLI are implemented. The workflow
+> examples below remain API proposals. No community installation is available.
+>
+> Test-only builds verify Rust GEOMETRY/nested output, offline EPSG:4326 → EPSG:3857
+> transformation and a transactional query-pragma alternative. The proposed
+> `CALL ducklocate_import(...)` cannot execute catalogue writes through the selected
+> callback context; its documented atomicity requirement remains unchanged.
+> See [native foundation evidence](docs/native-foundation.md).
+
+## Build and load the implemented foundation
+
+The verified combination is Rust 1.98.1, `duckdb-neo` 0.20000.2, DuckDB 2.0.0
+and Spatial revision `a3dbcd1781` on `osx_arm64`. The catalogue itself needs no
+Spatial extension. Run from the repository root:
+
+```sh
+git submodule update --init --recursive
+make configure
+configure/venv/bin/python3 scripts/setup_duckdb.py
+make debug
+make test_debug
+make release
+make test_release
+duckdb -unsigned -c "LOAD '$PWD/build/release/ducklocate.duckdb_extension'; SELECT * FROM ducklocate_profiles();"
+```
+
+Use the verified shell printed by `setup_duckdb.py` (existing `duckdb` or
+`.cache/bin/duckdb`). `-unsigned` permits this local development
+artifact; version and platform validation stay enabled. Build outputs, downloaded
+artifacts and Python environments are ignored. The build adapts the
+[pinned official Rust template](https://github.com/duckdb/extension-template-rs/tree/a679601f8e133db7546777c6637bc7a6c2d2780e)
+and retains its metadata-footer tooling. Rustup installs the pinned toolchain if
+needed; Python 3 with venv/pip, Make, Git and platform build tools are prerequisites.
+
+To reproduce the isolated native experiments:
+
+```sh
+configure/venv/bin/python3 scripts/setup_spatial.py
+make debug PROBES=1
+make test_debug PROBES=1
+make release PROBES=1
+make test_release PROBES=1
+```
+
+Spatial acquisition is explicit setup work and hash-checked. These artifacts live
+under `build/probes/`; normal artifacts contain no probe functions. The
+[development note](docs/native-foundation.md) documents the probe signatures,
+offline checks, compatibility identities, transaction reproducer and limitations.
 
 ## Contents
 
+- [Build and load the implemented foundation](#build-and-load-the-implemented-foundation)
 - [Workflow](#workflow)
 - [Command-line interface](#command-line-interface)
 - [API overview](#api-overview)
@@ -79,8 +127,9 @@ The download returns the actual file path and its content hash. It does not
 create database tables. Reading a file does not download or refresh anything.
 Keep downloaded inputs and generated databases outside Git.
 
-The proposed geometry interface uses DuckDB Spatial's `GEOMETRY` type. Once a
-compatible native artifact exists, the intended loading sequence is:
+The proposed reader uses the same native `GEOMETRY` type verified by the
+foundation probes. Spatial interoperability is verified with this loading sequence
+(use the hash-pinned local Spatial artifact from setup for reproducible tests):
 
 ```sql
 INSTALL spatial;
@@ -144,9 +193,12 @@ extension artifacts remains part of the native integration work.
 
 ## API overview
 
-The SQL surface consists of six table functions. `CALL` is the documented way to
-invoke download and import operations; in DuckDB, CALL itself invokes a table
-function rather than providing a separate procedure mechanism.
+The proposed SQL surface consists of six table functions; only
+`ducklocate_profiles()` is registered today. `CALL` is the proposed way to invoke
+download and import operations; in DuckDB, CALL itself invokes a table function
+rather than providing a separate procedure mechanism. The selected C API v2 does
+not expose caller-transaction SQL execution to table-function callbacks; see the
+[transaction experiment](docs/native-foundation.md#atomic-import-investigation).
 
 | Function | Purpose | Network access | Persistent writes |
 |---|---|---|---|
@@ -196,9 +248,12 @@ The result contains one summary row per profile: `profile VARCHAR`,
 `profile_version VARCHAR`, `schema_version VARCHAR`, `table_name VARCHAR`,
 `row_count UBIGINT`, `source_sha256 VARCHAR` and `geometry_crs VARCHAR`.
 Results describe completed tables,
-not intermediate progress. Native support for catalogue writes in the caller's
-transaction must be verified before implementing this convenience operation;
-running independent writes on a second connection is not an equivalent substitute.
+not intermediate progress. The selected callback API exposes no caller-transaction
+SQL executor, so this convenience operation remains unimplemented. A test-only
+query-pragma alternative passes rollback and failure checks; adopting it would
+require an explicit interface decision. Running independent writes on a second
+connection is not an equivalent substitute. See the
+[transaction findings](docs/native-foundation.md#atomic-import-investigation).
 
 ## Discover profiles
 
@@ -208,7 +263,8 @@ FROM ducklocate_profiles()
 ORDER BY profile;
 ```
 
-The catalogue returns one row per available profile version:
+The implemented catalogue currently returns zero rows with the following schema.
+It will return one row per available profile version when profiles are implemented:
 
 | Column | Type | Meaning |
 |---|---|---|
@@ -401,11 +457,19 @@ height. Web Mercator's coordinate units do not make it a suitable default for
 accurate ground-distance or area measurements. See the
 [PROJ Web Mercator definition](https://proj.org/en/stable/operations/projections/webmerc.html).
 
-DuckDB Spatial provides ST_Transform with an `always_xy` option. The intended
-integration reuses its PROJ-backed transformation facilities; exact Rust access,
-operation selection and metadata capture remain integration checks. A separate
-coordinate-projection implementation for the CLI would violate the shared-core
-contract. The default path performs no coordinate transformation.
+DuckDB Spatial provides ST_Transform with an `always_xy` option. The foundation's
+shared Rust coordinate path uses DuckDB's validating WKB-to-GEOMETRY cast and,
+for explicit EPSG:3857 output, Spatial's PROJ-backed ST_Transform with XY enabled.
+It returns owned geometry values through the native output vectors. The default
+EPSG:4326 path performs no coordinate transformation. These are synthetic native
+proofs, not an implemented reader or CLI; other target CRSs are rejected for now.
+
+The pinned Spatial artifact exposes its revision and PROJ versions. Its embedded
+CRS database can be identified by artifact inspection, but SQL does not expose
+the selected operation pipeline or a runtime grid manifest. The full metadata
+proposal above therefore remains partly unresolved; no operation IDs or grid
+identities are fabricated. See [CRS evidence and gaps](docs/native-foundation.md#coordinate-path-and-provenance).
+A future CLI must call the same Rust path with its embedded DuckDB/Spatial session.
 
 ## Output columns
 
@@ -579,23 +643,26 @@ projection, optional output reprojection, feature diagnostics and materializatio
 Profile configuration files, custom clipping, incremental updates, combined-profile
 single-pass builds and additional providers remain separate design work.
 
-Before implementing this interface, resolve and verify:
+The foundation verifies named arguments, bind-time schemas, native GEOMETRY and
+nested types. Before implementing the remaining interface, resolve and verify:
 
-1. Rust binding support for named arguments, bind-time profile schemas and the selected native GEOMETRY representation.
+1. Apply the verified native adapters to actual profile rows and bounded source processing.
 2. Download callback lifecycle, cancellation, publication races and external-file access under DuckDB's security settings.
 3. The first complete profile contract and hand-written acceptance fixture, including relation handling, identity and diagnostics.
 4. Bounded reference-resolution storage, source snapshot consistency and the measured cost of hashing and lineage.
 5. Source-manifest format and exact-version compatibility checks.
-6. Atomic SQL import in the caller's transaction, CLI database publication and shared-core equivalence between both interfaces.
-7. Offline CRS transformations, axis order, operation/grid selection, metadata capture and independently justified control-point tests.
+6. Resolve the proposed CALL import limitation, using explicit caller-owned transactions or separately approving a query-pragma interface; qualify CLI publication and shared-core equivalence when the CLI exists.
+7. Extend the qualified offline EPSG:4326/3857 path only after defining operation/accuracy policy and obtaining the missing runtime operation/grid provenance.
 
-These are integration and design gates, not measured capabilities. There is no
-REST service in this design.
+These remaining items are integration and design gates. The foundation evidence
+is recorded separately; there is no REST service in this design.
 
 ## Development and references
 
 [Concept.md](Concept.md) records product scope and durable choices. This README
-is the user-facing SQL and CLI proposal. [AGENTS.md](AGENTS.md) points to repository
+documents the implemented foundation and remaining SQL/CLI proposal.
+[Native foundation](docs/native-foundation.md) records setup and measured compatibility.
+[AGENTS.md](AGENTS.md) points to repository
 instructions and the focused development skills. A software license has not yet
 been selected; OSM input and derivative data have their own licensing obligations.
 

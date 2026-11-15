@@ -1,0 +1,15 @@
+[package]
+name = "ducklocate"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+foundation-probes = ["ducklocate-core/foundation-probes"]
+
+[dependencies]
+duckdb-neo = { workspace = true, features = ["build-extension"] }
+ducklocate-core.workspace = true
