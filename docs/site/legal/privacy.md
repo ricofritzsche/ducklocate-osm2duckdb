@@ -11,8 +11,10 @@ Last updated: 15 November 2026.
 
 Rico Fritzsche, C/ dels Apuntadors 4, 07012 Palma, Illes Balears, Spain,
 is responsible for personal data processed in operating the DuckLocate website
-and handling project correspondence. Contact:
-[rico@bluvolve.dev](mailto:rico@bluvolve.dev).
+and handling project correspondence. For project enquiries, use
+[GitHub issues](https://github.com/ricofritzsche/ducklocate-osm2duckdb/issues).
+For private correspondence and data-protection requests, write to the postal
+address above. GitHub issues are public and should not contain private information.
 
 ## Website visits and hosting
 
@@ -66,14 +68,13 @@ and preferences, so it does not present a tracking-consent banner. Spanish
 regulator guidance distinguishes these uses from storage requiring consent;
 see the [AEPD cookie guide](https://www.aepd.es/guias/guia-cookies.pdf).
 
-## Email and project participation
+## Correspondence and project participation
 
-If you contact the maintainer, your email address, name if supplied, message
-and necessary correspondence metadata are used to answer your request and
-follow up on the project matter you raised. Mail delivery and storage providers
-process correspondence as needed to provide those services. Providing a name
-is optional; an address to reply to and enough detail to answer are needed if
-you want a response. Messages are not used for marketing.
+If you write to the maintainer, your name and reply address if supplied, message
+and necessary correspondence details are used to answer your request and follow
+up on the project matter you raised. Postal delivery providers handle letters
+as needed to deliver them. Enough information to answer and a way to reply are
+needed if you want a response. Messages are not used for marketing.
 
 The legal basis is the legitimate interest in responding to enquiries and
 maintaining an open-source project (Article 6(1)(f) GDPR), or compliance with a
@@ -91,7 +92,7 @@ collaborative development, attribution and a reproducible development record
 while they remain part of that record. Removal requests are assessed against
 applicable rights and the need to preserve attribution and legal records.
 GitHub's own privacy terms also apply. Avoid including private information in
-public reports; email the maintainer for private matters.
+public reports; use the postal address above for private matters.
 
 ## Your rights
 
@@ -102,7 +103,7 @@ depends on consent, you may withdraw that consent without affecting earlier
 lawful processing. The project does not make automated decisions about you or
 profile you.
 
-Contact [rico@bluvolve.dev](mailto:rico@bluvolve.dev) to exercise your rights
+Write to Rico Fritzsche at the postal address above to exercise your rights
 regarding the maintainer's processing. Requests are answered within one month;
 any lawful extension and its reason will be communicated within that month.
 For GitHub's own processing, use the contact and rights mechanisms in its

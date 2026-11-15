@@ -14,11 +14,12 @@ C/ dels Apuntadors 4<br />
 07012 Palma<br />
 Illes Balears, Spain
 
-Email: [rico@bluvolve.dev](mailto:rico@bluvolve.dev)
-
 Project repository: [DuckLocate on GitHub](https://github.com/ricofritzsche/ducklocate-osm2duckdb).
-Use GitHub issues for public bug reports and feature requests. Use email for
-private correspondence, privacy requests and legal enquiries.
+Contact the maintainer through
+[GitHub issues](https://github.com/ricofritzsche/ducklocate-osm2duckdb/issues)
+for project enquiries, bug reports and feature requests. Issues are public;
+do not include private information. Private legal correspondence and privacy
+requests can be sent by post to the operator's address above.
 
 ## About the project
 
