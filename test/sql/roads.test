@@ -1,0 +1,86 @@
+require ducklocate
+
+query I
+SELECT count(*) FROM ducklocate_read('test/fixtures/roads/valid.osm.pbf');
+----
+14
+
+query ITTT
+SELECT osm_id, nullif(road_class,''), oneway, nullif(name,'')
+FROM ducklocate_read('test/fixtures/roads/valid.osm.pbf')
+WHERE osm_id IN (100,101,104) ORDER BY osm_id;
+----
+100	future_road	backward	Straße 東京 🦆
+101	residential	NULL	NULL
+104	NULL	forward	NULL
+
+query IIII
+SELECT osm_version, source_refs[2].osm_id, source_refs[3].osm_id, len(source_refs)
+FROM ducklocate_read('test/fixtures/roads/valid.osm.pbf') WHERE osm_id=100;
+----
+NULL	3	1	4
+
+query TTT
+SELECT geometry_crs, profile_version, schema_version
+FROM ducklocate_read('test/fixtures/roads/valid.osm.pbf') WHERE osm_id=100;
+----
+EPSG:4326	1.0.0	1.0.0
+
+query T
+SELECT DISTINCT source_sha256 FROM ducklocate_read('test/fixtures/roads/valid.osm.pbf',
+ expected_sha256 := '3327C5E3B88BF280D0C53D9FFD6DDECD39F835D6ECA818C9B7745B8F4C128480');
+----
+3327c5e3b88bf280d0c53d9ffd6ddecd39f835d6eca818c9b7745b8f4c128480
+
+query I
+SELECT count(*) FROM ducklocate_read('test/fixtures/roads/empty.osm.pbf');
+----
+0
+
+query ITIT
+SELECT osm_id,status,geometry IS NULL,issues[1].code
+FROM ducklocate_read('test/fixtures/roads/rejected.osm.pbf',on_error:='report')
+WHERE osm_id IN (201,204,206) ORDER BY osm_id;
+----
+201	rejected	true	missing_reference
+204	rejected	true	invalid_geometry
+206	ok	false	NULL
+
+query TTR
+SELECT issues[1].code,issues[1].field,max_speed_kmh
+FROM ducklocate_read('test/fixtures/roads/valid.osm.pbf') WHERE osm_id=105;
+----
+conditional_value	maxspeed:conditional	NULL
+
+statement error
+SELECT * FROM ducklocate_read('test/fixtures/roads/rejected.osm.pbf');
+----
+missing_reference
+
+statement error
+SELECT * FROM ducklocate_read('test/fixtures/roads/conflict.osm.pbf',on_error:='report');
+----
+duplicate/conflicting
+
+statement error
+SELECT * FROM ducklocate_read('absent.pbf',profile:='buildings');
+----
+unknown profile
+
+statement error
+SELECT * FROM ducklocate_read('absent.pbf',profile_version:='0.0.0');
+----
+unknown profile_version
+
+statement error
+SELECT * FROM ducklocate_read('test/fixtures/roads/valid.osm.pbf',expected_sha256:='0000000000000000000000000000000000000000000000000000000000000000');
+----
+mismatch
+
+statement ok
+CREATE TABLE sql_roads AS SELECT * FROM ducklocate_read('test/fixtures/roads/dense.osm.pbf');
+
+query IT
+SELECT osm_id,typeof(geometry) FROM sql_roads;
+----
+301	GEOMETRY

@@ -39,11 +39,7 @@ impl OutputCrs {
 /// Encode a finite WGS84 point in standard little-endian OGC WKB, longitude first.
 /// This is an interchange representation, never a claim about DuckDB vector layout.
 pub fn point_wkb(longitude: f64, latitude: f64) -> Result<Vec<u8>> {
-    if !longitude.is_finite()
-        || !latitude.is_finite()
-        || !(-180.0..=180.0).contains(&longitude)
-        || !(-90.0..=90.0).contains(&latitude)
-    {
+    if !valid_wgs84(longitude, latitude) {
         return Err(Error::invalid_input("invalid WGS84 longitude/latitude"));
     }
     let mut wkb = Vec::with_capacity(21);
@@ -75,20 +71,116 @@ pub fn transform_geometry(
     let source = "EPSG:4326";
     let target = target.name();
     let mut result = connection.query(
-        "SELECT g, ST_IsEmpty(g) OR (isfinite(ST_XMin(g)) AND isfinite(ST_YMin(g)) \
-         AND isfinite(ST_XMax(g)) AND isfinite(ST_YMax(g))) \
-         FROM (SELECT ST_Transform($1, $2, $3, always_xy := true) AS g)",
+        "SELECT g, ST_AsWKB(g) FROM (SELECT ST_Transform($1, $2, $3, always_xy := true) AS g)",
         Parameters::positional(&[&geometry, &source, &target]),
     )?;
     let chunk = result
         .next_chunk()?
         .ok_or_else(|| Error::api_error("Spatial returned no geometry"))?;
-    if chunk.get_vector_at::<bool>(1)?.reader()?.get(0)? != Some(&true) {
+    let wkb = chunk
+        .get_vector_at::<Unknown>(1)?
+        .get_value_slow(0)?
+        .get::<BlobValue>()?;
+    if !wkb.is_some_and(|wkb| finite_wkb(&wkb.0)) {
         return Err(Error::invalid_input(
             "transformation_failed: non-finite output coordinates",
         ));
     }
     chunk.get_vector_at::<Unknown>(0)?.get_value_slow(0)
+}
+
+pub(crate) fn valid_wgs84(x: f64, y: f64) -> bool {
+    x.is_finite() && y.is_finite() && (-180.0..=180.0).contains(&x) && (-90.0..=90.0).contains(&y)
+}
+
+pub(crate) fn line_wkb(points: &[(f64, f64)]) -> Result<Vec<u8>> {
+    if points.len() < 2 || points.iter().any(|(x, y)| !valid_wgs84(*x, *y)) {
+        return Err(Error::invalid_input(
+            "invalid_geometry: invalid line coordinates",
+        ));
+    }
+    let mut wkb = Vec::with_capacity(9 + points.len() * 16);
+    wkb.push(1);
+    wkb.extend_from_slice(&2_u32.to_le_bytes());
+    wkb.extend_from_slice(&(points.len() as u32).to_le_bytes());
+    for (x, y) in points {
+        wkb.extend_from_slice(&x.to_le_bytes());
+        wkb.extend_from_slice(&y.to_le_bytes());
+    }
+    Ok(wkb)
+}
+
+/// Validate every coordinate of standard XY WKB, not merely its envelope.
+/// Empty point NaN/NaN is the OGC empty encoding; partial NaNs are invalid.
+fn finite_wkb(mut input: &[u8]) -> bool {
+    fn take<const N: usize>(input: &mut &[u8]) -> Option<[u8; N]> {
+        let bytes = input.get(..N)?.try_into().ok()?;
+        *input = &input[N..];
+        Some(bytes)
+    }
+    fn geometry(input: &mut &[u8], depth: u8) -> Option<()> {
+        if depth > 32 {
+            return None;
+        }
+        let le = match take::<1>(input)?[0] {
+            0 => false,
+            1 => true,
+            _ => return None,
+        };
+        let u32_at = |input: &mut &[u8]| -> Option<u32> {
+            let b = take(input)?;
+            Some(if le {
+                u32::from_le_bytes(b)
+            } else {
+                u32::from_be_bytes(b)
+            })
+        };
+        let point = |input: &mut &[u8], empty: bool| -> Option<()> {
+            let x = take(input)?;
+            let y = take(input)?;
+            let (x, y) = if le {
+                (f64::from_le_bytes(x), f64::from_le_bytes(y))
+            } else {
+                (f64::from_be_bytes(x), f64::from_be_bytes(y))
+            };
+            (x.is_finite() && y.is_finite() || empty && x.is_nan() && y.is_nan()).then_some(())
+        };
+        let line = |input: &mut &[u8]| -> Option<()> {
+            let n = u32_at(input)? as usize;
+            if n > input.len() / 16 {
+                return None;
+            }
+            for _ in 0..n {
+                point(input, false)?;
+            }
+            Some(())
+        };
+        match u32_at(input)? {
+            1 => point(input, true)?,
+            2 => line(input)?,
+            3 => {
+                let n = u32_at(input)? as usize;
+                if n > input.len() / 4 {
+                    return None;
+                }
+                for _ in 0..n {
+                    line(input)?;
+                }
+            }
+            4..=7 => {
+                let n = u32_at(input)? as usize;
+                if n > input.len() / 5 {
+                    return None;
+                }
+                for _ in 0..n {
+                    geometry(input, depth + 1)?;
+                }
+            }
+            _ => return None,
+        }
+        Some(())
+    }
+    geometry(&mut input, 0).is_some() && input.is_empty()
 }
 
 #[cfg(test)]
@@ -113,5 +205,17 @@ mod tests {
             assert!(point_wkb(x, y).is_err());
         }
         Ok(())
+    }
+    #[test]
+    fn checks_every_vertex_not_just_bounds() {
+        let mut wkb = vec![1, 2, 0, 0, 0, 3, 0, 0, 0];
+        for (x, y) in [(2_f64, 49_f64), (3., 50.), (4., 51.)] {
+            wkb.extend_from_slice(&x.to_le_bytes());
+            wkb.extend_from_slice(&y.to_le_bytes());
+        }
+        assert!(finite_wkb(&wkb));
+        wkb[25..33].copy_from_slice(&f64::NAN.to_le_bytes());
+        assert!(!finite_wkb(&wkb));
+        assert!(!finite_wkb(&wkb[..20]));
     }
 }

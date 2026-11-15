@@ -1,0 +1,25 @@
+{
+  "nodes": [
+    {"id": 1, "version": 1, "x": 2, "y": 49},
+    {"id": 2, "x": 3, "y": 50},
+    {"id": 3, "version": 3, "x": 4, "y": 51}
+  ],
+  "ways": [
+    {"id": 100, "refs": [3,1,2,1], "tags": {"highway":"future_road", "name":"Straße 東京 🦆", "surface":"pavé", "maxspeed":"30 mph", "oneway":"-1"}},
+    {"id": 101, "version": 2, "refs": [1,2,1], "tags": {"highway":"residential", "junction":"roundabout", "maxspeed":"50"}},
+    {"id": 102, "refs": [1,2,1], "tags": {"highway":"pedestrian", "area":"yes"}},
+    {"id": 103, "refs": [1,2], "tags": {"name":"not selected", "area:highway":"residential"}},
+    {"id": 104, "refs": [2,1], "tags": {"highway":"", "name":"", "maxspeed":"10 knots", "oneway":"yes"}},
+    {"id": 105, "refs": [1,2], "tags": {"highway":"service", "maxspeed":"50", "maxspeed:conditional":"30 @ (wet)", "oneway":"yes", "oneway:conditional":"no @ (Mo-Fr)"}},
+    {"id": 106, "refs": [1,2], "tags": {"highway":"path", "maxspeed":"walk", "oneway":"reversible"}},
+    {"id": 107, "refs": [1,2], "tags": {"highway":"primary", "maxspeed":" 12.5 km/h ", "oneway":"no"}},
+    {"id": 108, "refs": [1,2], "tags": {"highway":"primary", "maxspeed":"50;80", "oneway":"alternating"}},
+    {"id": 109, "refs": [1,2], "tags": {"highway":"primary", "maxspeed":"none", "oneway":"1"}},
+    {"id": 110, "refs": [1,2], "tags": {"highway":"motorway", "maxspeed":"DE:urban", "oneway":"0"}},
+    {"id": 111, "refs": [1,2], "tags": {"highway":"primary", "maxspeed":"30 kph", "oneway":"true"}},
+    {"id": 112, "refs": [1,2], "tags": {"highway":"primary", "maxspeed":"-10", "oneway":"false"}},
+    {"id": 113, "refs": [1,2], "tags": {"highway":"primary", "maxspeed":"30 @ (wet)", "oneway":"yes @ (wet)"}},
+    {"id": 114, "refs": [1,2], "tags": {"highway":"primary", "area":"no", "maxspeed":"80", "maxspeed:forward":"90", "oneway":"yes", "oneway:bicycle":"no"}},
+    {"id": 115, "refs": [1,2], "tags": {"highway":"primary"}}
+  ]
+}

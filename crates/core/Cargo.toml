@@ -9,3 +9,12 @@ foundation-probes = []
 
 [dependencies]
 duckdb-neo.workspace = true
+# Bounded PBF decompression and exact snapshot identity.
+flate2 = "=1.1.11"
+sha2 = "=0.10.9"
+# Private scan storage and a disk-backed dependency index (not DuckDB memory).
+tempfile = "=3.27.0"
+rusqlite = { version = "=0.32.1", features = ["bundled"] }
+# Bounded per-way spool records, independent of the native output adapter.
+serde = { version = "1", features = ["derive"] }
+serde_json = "=1.0.154"

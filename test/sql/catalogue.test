@@ -3,7 +3,7 @@ require ducklocate
 query I
 SELECT count(*) FROM ducklocate_profiles();
 ----
-0
+1
 
 query TT
 SELECT column_name, column_type FROM (DESCRIBE SELECT * FROM ducklocate_profiles());
@@ -18,7 +18,7 @@ geometry_types	VARCHAR[]
 query I
 SELECT count(*) FROM ducklocate_profiles() a CROSS JOIN ducklocate_profiles() b;
 ----
-0
+1
 
 statement error
 SELECT * FROM ducklocate_profiles(NULL);
@@ -27,6 +27,11 @@ No function matches
 
 query I
 SELECT count(*) FROM duckdb_functions()
-WHERE function_name IN ('ducklocate_read', 'ducklocate_source', 'ducklocate_import', 'ducklocate_download', 'ducklocate_regions');
+WHERE function_name IN ('ducklocate_source', 'ducklocate_import', 'ducklocate_download', 'ducklocate_regions');
 ----
 0
+
+query TTTIT
+SELECT profile,profile_version,schema_version,is_default,array_to_string(geometry_types,',') FROM ducklocate_profiles();
+----
+roads	1.0.0	1.0.0	true	LineString

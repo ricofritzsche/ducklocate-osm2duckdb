@@ -18,7 +18,7 @@ source restrictions, GridPin integration and HTTP architecture do not apply here
 ## Established direction
 
 - Native, open-source DuckDB extension, implemented in Rust and targeting DuckDB 2.0. Pin an exact compatible release when bootstrapping the build.
-- SQL and the osm2duckdb CLI are supported user interfaces. The CLI builds a DuckDB database from a region or local file and selected profiles. A server or REST API is not part of the product.
+- SQL and the planned osm2duckdb CLI are the intended user interfaces. The CLI builds a DuckDB database from a region or local file and selected profiles. A server or REST API is not part of the product.
 - Support local OSM files and explicit downloads of named regions. Projection of a local file must not implicitly acquire or refresh data.
 - Support an optional output CRS consistently in SQL and CLI. Default to WGS84 longitude/latitude in XY order; explicit reprojection transforms geometry and records the output CRS, axis convention and transformation provenance. Source data and identifiers remain unchanged, and local reads stay offline.
 - A catalogue of versioned projection profiles describes datasets such as roads, buildings, administrative areas and points of interest. Barriers, settlements, landmarks, water, land use and infrastructure belong to the broader design catalogue.
@@ -82,12 +82,15 @@ lookup, explicit downloads, local source inspection, profile reads and a conveni
 import operation. The CLI builds a database containing selected profile tables and
 source/profile metadata. Both interfaces use the same projection rules and snapshot
 identity. DuckDB owns catalogue and transaction behavior. Native loading, the
-empty catalogue, geometry/nested output and the initial CRS path are verified in
+catalogue, geometry/nested output and the initial CRS path are verified in
 [the development note](docs/native-foundation.md). The C API callback context has
 no caller-transaction SQL execution handle. The proposed CALL import stays
 unimplemented; its atomicity contract must be preserved. A test-only query-pragma
 SQL expansion demonstrates a possible alternative without committing to a public
-interface change. Complete profile contracts remain future work.
+interface change. The first implemented profile is [roads 1.0.0](docs/roads-v1.md), a local-PBF
+linear-way profile with bounded disk-backed dependency resolution and caller-owned
+SQL materialization. Relations, road areas and routing topology remain out of scope.
+No other profiles are registered.
 
 Keep public signatures and examples in the README rather than duplicating them
 here. Design work may refine the proposal; record settled scope choices here and
@@ -97,17 +100,17 @@ retain an explicit distinction between proposed behavior and implementation evid
 
 Resolve these as concrete tasks need them, with a short rationale and evidence:
 
-- First profile and regional acceptance fixture; first measured real extract.
-- Review the proposed SQL signatures, CLI build contract, catalogue, materialization workflow and diagnostic row contract in README.md.
+- First measured real extract; regional and scale acceptance beyond the synthetic roads fixtures.
+- Extend the implemented reader/catalogue and roads diagnostic contract deliberately; review remaining proposed SQL and CLI interfaces in README.md.
 - Named-region provider integration and exact extract semantics; Geofabrik is the proposed first provider.
 - Geometry representation, spatial-extension integration and index strategy; CRS operation selection, accuracy policy and metadata capture.
-- Table keys, shared source storage and dependency indexes.
+- Shared multi-profile source storage and persistent dependency indexes; the roads reader currently uses a private bounded SQLite index per scan.
 - External profile format and schema/profile compatibility policy.
 - Incremental updates, deletion handling and publication semantics.
 - Broader platforms and future embedded CLI packaging beyond the pinned macOS arm64 native foundation.
 - Software license and community-distribution route. Software and OSM data licensing are separate.
 
-The README distinguishes the implemented native foundation and empty profile
+The README distinguishes the implemented local-PBF roads reader and profile
 catalogue from the remaining proposed SQL and CLI interfaces. No supported-platform matrix or
 performance target has been fixed by this document. Public descriptions state
 the product's purpose; verified support and current limitations belong in

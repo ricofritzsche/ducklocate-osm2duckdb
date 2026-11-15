@@ -1,675 +1,238 @@
 # Ducklocate: OSM to DuckDB
 
-An open-source DuckDB extension written in Rust that turns OpenStreetMap data into
-structured, queryable tables for roads, buildings, administrative areas and points
-of interest, with typed attributes, geometries and source references.
+A native DuckDB extension written in Rust that projects OpenStreetMap snapshots
+into typed, queryable features with geometry, original tags and source lineage.
+The shared Rust projection code is intended for a future `osm2duckdb` CLI.
 
-Choose a local OSM file or explicitly download a named region. Select a projection
-profile and work through SQL or the `osm2duckdb` command-line tool. Both interfaces
-use the same Rust projection code, profile definitions and output schemas.
+**Implemented:** local OSM PBF reads through `ducklocate_read` and discovery through
+`ducklocate_profiles`. The only profile is **roads 1.0.0**, schema **1.0.0**:
+one LineString per selected highway-tagged way. The verified platform is macOS
+arm64, **DuckDB 2.0.0**, Rust 1.98.1, `duckdb-neo` 0.20000.2. No community
+installation is available. Downloads, named regions, other profiles, source
+inspection, convenience import, CLI and updates remain proposals.
 
-> **Implementation status:** The native foundation is implemented and verified on
-> macOS arm64 with DuckDB **2.0.0**. The only public function is
-> `ducklocate_profiles()`, returning the documented schema and **zero rows**.
-> No OSM profiles, parsing, downloads, imports or CLI are implemented. The workflow
-> examples below remain API proposals. No community installation is available.
->
-> Test-only builds verify Rust GEOMETRY/nested output, offline EPSG:4326 → EPSG:3857
-> transformation and a transactional query-pragma alternative. The proposed
-> `CALL ducklocate_import(...)` cannot execute catalogue writes through the selected
-> callback context; its documented atomicity requirement remains unchanged.
-> See [native foundation evidence](docs/native-foundation.md).
+- [Roads contract: selection, schema, diagnostics and limits](docs/roads-v1.md)
+- [Roads milestone verification](docs/roads-verification.md)
+- [Native foundation and CRS provenance limits](docs/native-foundation.md)
+- [Concept and future scope](Concept.md)
 
-## Build and load the implemented foundation
+## Build and test
 
-The verified combination is Rust 1.98.1, `duckdb-neo` 0.20000.2, DuckDB 2.0.0
-and Spatial revision `a3dbcd1781` on `osx_arm64`. The catalogue itself needs no
-Spatial extension. Run from the repository root:
+From the repository root:
 
 ```sh
 git submodule update --init --recursive
 make configure
 configure/venv/bin/python3 scripts/setup_duckdb.py
+configure/venv/bin/python3 scripts/setup_spatial.py
+cargo fmt --all --check
+cargo test --workspace --locked
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 make debug
 make test_debug
 make release
 make test_release
-duckdb -unsigned -c "LOAD '$PWD/build/release/ducklocate.duckdb_extension'; SELECT * FROM ducklocate_profiles();"
-```
-
-Use the verified shell printed by `setup_duckdb.py` (existing `duckdb` or
-`.cache/bin/duckdb`). `-unsigned` permits this local development
-artifact; version and platform validation stay enabled. Build outputs, downloaded
-artifacts and Python environments are ignored. The build adapts the
-[pinned official Rust template](https://github.com/duckdb/extension-template-rs/tree/a679601f8e133db7546777c6637bc7a6c2d2780e)
-and retains its metadata-footer tooling. Rustup installs the pinned toolchain if
-needed; Python 3 with venv/pip, Make, Git and platform build tools are prerequisites.
-
-To reproduce the isolated native experiments:
-
-```sh
-configure/venv/bin/python3 scripts/setup_spatial.py
 make debug PROBES=1
 make test_debug PROBES=1
 make release PROBES=1
 make test_release PROBES=1
+configure/venv/bin/python3 scripts/test_native_checks.py
 ```
 
-Spatial acquisition is explicit setup work and hash-checked. These artifacts live
-under `build/probes/`; normal artifacts contain no probe functions. The
-[development note](docs/native-foundation.md) documents the probe signatures,
-offline checks, compatibility identities, transaction reproducer and limitations.
+Setup explicitly acquires hash-checked development dependencies; reading a local
+file never downloads. Use the verified shell reported by `setup_duckdb.py`
+(`duckdb` or `.cache/bin/duckdb`). Python 3 with venv/pip, Make, Git and platform
+build tools are required. Rustup installs the pinned toolchain if needed.
+Normal artifacts are under `build/{debug,release}`; isolated probe builds are
+under `build/probes/{debug,release}`. Each test target runs SQLLogicTest and native
+acceptance, including exact public function sets and metadata rejection safeguards.
+Acceptance installs the pinned local Spatial artifact into `.cache/roads-extensions`.
+Caches, generated databases and build outputs are ignored.
 
-## Contents
+The build retains the metadata footer from the [pinned official Rust template](https://github.com/duckdb/extension-template-rs/tree/a679601f8e133db7546777c6637bc7a6c2d2780e).
+`-unsigned` is required for these local development artifacts. Exact DuckDB
+version/platform checks remain enabled; targeting the 2.0 family is insufficient.
+Do not strip or rename a raw Cargo library as a packaged extension.
 
-- [Build and load the implemented foundation](#build-and-load-the-implemented-foundation)
-- [Workflow](#workflow)
-- [Command-line interface](#command-line-interface)
-- [API overview](#api-overview)
-- [Import selected profiles through SQL](#import-selected-profiles-through-sql)
-- [Discover profiles](#discover-profiles)
-- [Choose a source](#choose-a-source)
-- [Read a profile](#read-a-profile)
-- [Coordinate reference systems](#coordinate-reference-systems)
-- [Output columns](#output-columns)
-- [Quality and errors](#quality-and-errors)
-- [Store and index tables](#store-and-index-tables)
-- [Reproducibility](#reproducibility)
-- [Scope and implementation questions](#scope-and-implementation-questions)
-- [Development and references](#development-and-references)
+## Read a local file
 
-## Workflow
-
-Build a database containing selected object classes from a named region:
+Run this from the repository root after `make release` (the absolute LOAD path
+also works in the hardened macOS shell):
 
 ```sh
-osm2duckdb build \
-  --region germany \
-  --objects roads,buildings,barriers \
-  --output germany.duckdb
+duckdb -unsigned <<SQL
+LOAD '$PWD/build/release/ducklocate.duckdb_extension';
+SELECT * FROM ducklocate_profiles();
+
+SELECT feature_id, name, road_class, max_speed_kmh, oneway, geometry_crs
+FROM ducklocate_read('test/fixtures/roads/valid.osm.pbf', profile := 'roads')
+WHERE osm_id = 100;
+-- roads:way:100 | Straße 東京 🦆 | future_road | 48.28032 | backward | EPSG:4326
+SQL
 ```
 
-This creates `roads`, `buildings` and `barriers` tables from one source snapshot.
-The object names select projection profiles, not raw OSM element types.
-
-Inside DuckDB, the corresponding convenience operation writes into a schema:
-
-```sql
-CALL ducklocate_import(
-    region := 'germany',
-    profiles := ['roads', 'buildings', 'barriers'],
-    schema := 'osm'
-);
-```
-
-This creates `osm.roads`, `osm.buildings` and `osm.barriers`. Both workflows also
-store source and profile metadata, including for tables that contain no features.
-
-Using an existing file requires no network access:
+Use your own existing snapshot path in place of the synthetic fixture. The
+reader returns native `GEOMETRY`; Spatial is unnecessary for default reads.
+Load a matching local Spatial artifact to use `ST_AsText`, spatial predicates
+or an R-tree index. In a session with Ducklocate loaded:
 
 ```sql
-SELECT name, road_class, max_speed_kmh, geometry
-FROM ducklocate_read('germany.osm.pbf', profile := 'roads')
-WHERE max_speed_kmh > 80;
-```
+DESCRIBE SELECT * FROM ducklocate_read('test/fixtures/roads/valid.osm.pbf');
 
-To obtain the file through Ducklocate, download the region first:
-
-```sql
-CALL ducklocate_download('germany', directory := './data/germany');
-
+BEGIN TRANSACTION;
 CREATE TABLE roads AS
-SELECT *
-FROM ducklocate_read('./data/germany/source.osm.pbf', profile := 'roads');
-```
-
-The download returns the actual file path and its content hash. It does not
-create database tables. Reading a file does not download or refresh anything.
-Keep downloaded inputs and generated databases outside Git.
-
-The proposed reader uses the same native `GEOMETRY` type verified by the
-foundation probes. Spatial interoperability is verified with this loading sequence
-(use the hash-pinned local Spatial artifact from setup for reproducible tests):
-
-```sql
-INSTALL spatial;
-LOAD spatial;
-LOAD '/absolute/path/to/ducklocate.duckdb_extension';
-```
-
-`INSTALL spatial` needs network access when Spatial is not already installed.
-Development builds of Ducklocate require a DuckDB process started with unsigned
-extension loading enabled. The artifact must match its exact DuckDB release and
-platform; targeting the 2.0 family alone does not establish binary compatibility.
-
-## Command-line interface
-
-`osm2duckdb build` creates a persistent DuckDB database. It selects profiles,
-obtains one snapshot, projects the requested tables and records their provenance.
-
-Use `--source` instead of `--region` to build from an existing file:
-
-```sh
-osm2duckdb build \
-  --source ./germany.osm.pbf \
-  --objects roads,buildings,barriers \
-  --output germany.duckdb
-```
-
-| Option | Meaning |
-|---|---|
-| `--region` | Named region to obtain from the download provider. |
-| `--source` | Existing local `.osm.pbf` snapshot; no network access. |
-| `--objects` | Required comma-separated profile names. |
-| `--output` | Required destination DuckDB database file. |
-| `--schema` | Output schema; defaults to `main`. |
-| `--crs` | Optional output CRS, such as `EPSG:3857`; defaults to `EPSG:4326`. |
-
-Exactly one of `--region` and `--source` is required. Unknown or unavailable
-profiles are errors. Each selected profile uses its installed default version;
-the effective versions are recorded in the database. A region build resolves the
-provider's current snapshot once. Cached bytes may be reused only when verified
-as that same snapshot; an older local file is not silently treated as current.
-
-The build creates one table per selected profile, plus `_ducklocate_source` and
-`_ducklocate_profiles` in the output schema. These metadata tables store the source
-identity/provenance and effective profile/schema/extension identities. Their full
-schemas and cache-location controls still need specification.
-
-An existing output file causes an error; there is no implicit replacement.
-Publish the output only after the complete build succeeds and the database has
-been closed. Failures return a nonzero exit status and must not leave an output
-file presented as a completed build. Downloads/cache files are separate artifacts.
-The completion summary reports the output path, source hash and per-profile counts.
-
-The same output CRS applies to every selected profile. See
-[coordinate reference systems](#coordinate-reference-systems) for examples,
-axis order and transformation metadata.
-
-The CLI and extension share projection rules, geometry, diagnostics and schema
-definitions. The CLI may use embedded DuckDB; users do not need to run a database
-server or provide a DuckDB shell. Packaging the matching engine, Spatial and
-extension artifacts remains part of the native integration work.
-
-## API overview
-
-The proposed SQL surface consists of six table functions; only
-`ducklocate_profiles()` is registered today. `CALL` is the proposed way to invoke
-download and import operations; in DuckDB, CALL itself invokes a table function
-rather than providing a separate procedure mechanism. The selected C API v2 does
-not expose caller-transaction SQL execution to table-function callbacks; see the
-[transaction experiment](docs/native-foundation.md#atomic-import-investigation).
-
-| Function | Purpose | Network access | Persistent writes |
-|---|---|---|---|
-| `ducklocate_profiles()` | List profiles provided by the installed extension. | No | None |
-| `ducklocate_regions(...)` | List named extracts from a provider's current catalogue. | Yes, catalogue only | None |
-| `ducklocate_download(...)` | Download one named extract into a new directory. | Yes | Source file and manifest |
-| `ducklocate_import(...)` | Obtain one source and materialize selected profiles. | Region input only | Tables, metadata and acquired source/cache |
-| `ducklocate_source(path)` | Identify and inspect a local source. | No | None |
-| `ducklocate_read(path, ...)` | Project one local source using one profile. | No | None |
-
-Source inspection and profile reads may use bounded temporary working storage,
-which is released after execution. They do not create a persistent source cache
-or modify user tables. Region lookup and downloads perform network I/O during
-execution, never during extension loading, query binding or `EXPLAIN`.
-
-## Import selected profiles through SQL
-
-`ducklocate_import` is the convenience operation for creating a set of tables in
-the current database. The lower-level functions remain available for direct
-queries and custom materialization SQL.
-
-```sql
-CALL ducklocate_import(
-    source := './germany.osm.pbf',
-    profiles := ['buildings', 'roads'],
-    schema := 'osm'
+SELECT * FROM ducklocate_read(
+    'test/fixtures/roads/valid.osm.pbf',
+    profile_version := '1.0.0',
+    expected_sha256 := '3327c5e3b88bf280d0c53d9ffd6ddecd39f835d6eca818c9b7745b8f4c128480',
+    on_error := 'report'
 );
-```
+COMMIT;
 
-Exactly one of `region VARCHAR` and `source VARCHAR` is required, together with a
-non-empty `profiles VARCHAR[]` and a non-empty `schema VARCHAR`. Profile names
-must be unique and available. The default download provider is Geofabrik. Local
-source input does not use the network. The schema is an identifier, not a SQL
-fragment; it may already exist, but none of the output tables may exist.
-
-An optional `crs VARCHAR` argument selects the output CRS for all imported tables;
-it defaults to `EPSG:4326`. Explicit NULL or an empty CRS is rejected. The same
-transformation contract applies to CLI builds, SQL imports and direct reads.
-
-The operation creates one table per profile and the two metadata tables described
-in the CLI contract. All profiles use one source snapshot and their installed
-default versions. It uses the reader's default `fail` policy. Table writes form
-one atomic database operation; a failed import must not expose a partially created
-set. Downloaded source files are not rolled back with database changes.
-
-The result contains one summary row per profile: `profile VARCHAR`,
-`profile_version VARCHAR`, `schema_version VARCHAR`, `table_name VARCHAR`,
-`row_count UBIGINT`, `source_sha256 VARCHAR` and `geometry_crs VARCHAR`.
-Results describe completed tables,
-not intermediate progress. The selected callback API exposes no caller-transaction
-SQL executor, so this convenience operation remains unimplemented. A test-only
-query-pragma alternative passes rollback and failure checks; adopting it would
-require an explicit interface decision. Running independent writes on a second
-connection is not an equivalent substitute. See the
-[transaction findings](docs/native-foundation.md#atomic-import-investigation).
-
-## Discover profiles
-
-```sql
-SELECT profile, profile_version, schema_version, description
-FROM ducklocate_profiles()
-ORDER BY profile;
-```
-
-The implemented catalogue currently returns zero rows with the following schema.
-It will return one row per available profile version when profiles are implemented:
-
-| Column | Type | Meaning |
-|---|---|---|
-| `profile` | `VARCHAR` | Stable profile name, such as `roads`. |
-| `profile_version` | `VARCHAR` | Exact version of its selection and interpretation rules. |
-| `schema_version` | `VARCHAR` | Version of the output-column contract. |
-| `is_default` | `BOOLEAN` | Whether this is the default version for this profile. |
-| `description` | `VARCHAR` | Purpose and significant limitations. |
-| `geometry_types` | `VARCHAR[]` | Geometry kinds the profile can produce. |
-
-Only profiles implemented by the installed extension appear here. The broader
-design catalogue is not a promise that every profile ships together. Each profile
-has exactly one default version; requesting an unavailable version is an error.
-
-Inspect a profile's complete output schema with DuckDB's own SQL:
-
-```sql
-DESCRIBE SELECT *
-FROM ducklocate_read('germany.osm.pbf', profile := 'roads');
-```
-
-The schema comes from the selected profile version, not from sampled tags. Binding
-does not scan the PBF to discover columns. Consequently, DESCRIBE is not a source
-validation operation.
-
-## Choose a source
-
-### Local files
-
-The initial input contract is one local `.osm.pbf` snapshot. The path is explicit;
-there is no connection-global active region. URLs, globs, lists of files,
-full-history PBFs and change files are outside this first contract.
-
-```sql
-SELECT * FROM ducklocate_source('germany.osm.pbf');
-```
-
-This returns one row with `path VARCHAR`, `sha256 VARCHAR`, `size_bytes UBIGINT`,
-`data_timestamp TIMESTAMPTZ`, `provider VARCHAR`, `region VARCHAR` and
-`source_url VARCHAR`. The hash covers the input file's bytes. The data timestamp
-is taken from source metadata when available, not from the file modification time.
-
-Provider, region and URL are nullable provenance supplied by a matching download
-manifest, not inferred from a filename. A manifest is trusted only when its hash
-matches the file. A manifest/file mismatch is an error; missing metadata is NULL.
-Hashing requires reading the whole file. This operation identifies the source;
-it does not prove that every feature can be reconstructed or interpreted.
-
-### Named regions
-
-Geofabrik is the proposed first download provider. Its region identifiers come
-from its published catalogue; `germany` is an ID, not a free-text place search.
-
-```sql
-SELECT region, name, parent, pbf_url
-FROM ducklocate_regions(provider := 'geofabrik')
-WHERE region = 'germany';
-```
-
-`provider` defaults to `geofabrik`. The result columns are `provider VARCHAR`,
-`region VARCHAR`, `name VARCHAR`, `parent VARCHAR` and `pbf_url VARCHAR`.
-`parent` may be NULL. This operation fetches the current public catalogue; it
-fails explicitly when the catalogue cannot be retrieved. It transfers no PBF.
-
-### Download a region
-
-```sql
-CALL ducklocate_download(
-    'germany',
-    directory := './data/germany',
-    provider := 'geofabrik'
-);
-```
-
-The required region and destination directory must be non-empty strings. The
-destination directory must not already exist, and its parent must exist. There
-is no implicit replacement or refresh of an earlier download. Use a new directory
-for a new snapshot; use the existing local file to reuse an earlier one.
-
-Execution resolves the provider's current PBF URL, downloads into a private
-staging directory, checks the transfer and PBF container, computes SHA-256, and
-publishes the directory only after the file and manifest are ready. A failed or
-interrupted transfer must not leave a directory presented as a completed download.
-
-The completed directory contains `source.osm.pbf` and `manifest.json`. The
-manifest records the provider/region, resolved URL, content hash and byte size,
-available source timestamp, acquisition time, catalogue identity and attribution.
-A computed hash identifies downloaded bytes; it is not a publisher signature.
-
-One result row returns `path`, `manifest_path`, `provider`, `region`, `source_url`,
-`sha256`, `size_bytes` and `data_timestamp`, using the types from source inspection
-and VARCHAR for the additional path. Acquisition time remains in the manifest.
-
-Use a top-level CALL and consume its result. The implementation must account for
-table-function rescans and cancellation; this design does not assume CALL provides
-exactly-once effects. File downloads are outside DuckDB's database transaction:
-rolling back a later SQL statement does not remove downloaded files.
-
-### What a region means
-
-A named region selects a provider's extract. It does not assert that every output
-geometry lies strictly inside an official administrative boundary. Geofabrik
-documents buffered extract boundaries and retained crossing features.
-
-The initial reader preserves complete available feature geometry and applies no
-additional clipping. Spatial filtering can be expressed through SQL after
-projection. Filtering rows by intersection retains their original geometry;
-clipping is a separate transformation. Missing references at extract edges remain
-errors or reported rejections, according to the selected error mode.
-
-## Read a profile
-
-```sql
-SELECT *
-FROM ducklocate_read('germany.osm.pbf', profile := 'buildings');
-```
-
-| Argument | Type | Default | Meaning |
-|---|---|---|---|
-| `path` | `VARCHAR` | Required, positional | Local snapshot file. |
-| `profile` | `VARCHAR` | Required, named | One profile from the installed catalogue. |
-| `profile_version` | `VARCHAR` | Installed default | Exact advertised profile version. |
-| `expected_sha256` | `VARCHAR` | NULL | Optional 64-character hexadecimal hash to verify. |
-| `on_error` | `VARCHAR` | `'fail'` | Feature-reconstruction policy: `fail` or `report`. |
-| `crs` | `VARCHAR` | `'EPSG:4326'` | Output geometry CRS; source coordinates remain WGS84. |
-
-Arguments must be known at bind time; the profile determines the result columns.
-Required arguments reject NULL and empty values. Omitted `profile_version` selects
-the catalogue default; explicit NULL is rejected. `expected_sha256 := NULL` means
-no caller-supplied hash assertion. Explicit NULL or an empty CRS is rejected.
-Unknown options, profiles, versions and error modes fail explicitly.
-
-Each invocation projects one profile, with a stable schema for that version. To
-read roads and buildings, make two calls rather than combining unrelated fields
-into one table. A source object may legitimately contribute to both profiles.
-
-The reader resolves referenced elements before constructing geometry. This can
-require multiple passes and temporary indexes. LIMIT, column selection and WHERE
-clauses do not promise a proportional reduction in source processing. A view
-re-executes its reader; separate profile calls are not guaranteed to share work.
-
-## Coordinate reference systems
-
-OSM source coordinates are WGS84. By default, output remains `EPSG:4326` in
-longitude/latitude degrees. Optional reprojection is selected with `--crs` on the
-CLI or `crs :=` in SQL. It is independent of selecting an object/profile: the
-`buildings` profile still describes buildings whichever output CRS is chosen.
-
-For example, write Web Mercator geometries for map use:
-
-```sh
-osm2duckdb build \
-  --region germany \
-  --objects roads,buildings,barriers \
-  --crs EPSG:3857 \
-  --output germany.duckdb
-```
-
-The SQL convenience call uses the same option:
-
-```sql
-CALL ducklocate_import(
-    region := 'germany',
-    profiles := ['roads', 'buildings', 'barriers'],
-    schema := 'osm',
-    crs := 'EPSG:3857'
-);
-```
-
-Or transform the output of a direct read:
-
-```sql
-SELECT name, geometry, geometry_crs
-FROM ducklocate_read('germany.osm.pbf', profile := 'roads', crs := 'EPSG:3857');
-```
-
-The proposed contract is:
-
-- Accept EPSG authority codes for supported two-dimensional horizontal CRSs. No automatic CRS selection from a region name. Custom pipelines, vertical transformations and coordinate epochs need separate specifications.
-- Use XY order consistently: longitude/latitude for default geographic output, easting/northing for conventional projected output. A CRS authority's axis declaration must not silently swap coordinates.
-- Transform reconstructed geometry once, after profile geometry assembly. Preserve input files, tags, source IDs and lineage; changing output CRS alone does not change feature IDs or the source hash.
-- Keep `geometry_crs` alongside geometry and persist the source/output CRS, axis convention and transformation identity in build metadata, including for empty tables. Do not assume a GEOMETRY value alone supplies this provenance.
-- Record the selected coordinate operation, DuckDB Spatial/PROJ versions, CRS database identity and required grid identities when applicable. The source hash and target EPSG code alone are insufficient for reproducing a transformed result.
-- Reject invalid CRS configuration or unavailable required transformation resources as statement/build errors in either error mode. A feature that produces invalid or non-finite transformed coordinates fails in `fail` mode or becomes a rejected row with `transformation_failed` in `report` mode. Never label unchanged coordinates with a requested target CRS after a failed transformation.
-- Keep transformation offline. Grid acquisition is explicit setup work; reading a local file with a requested CRS must not trigger a network download. The operation-selection and accuracy policy must be specified and tested before claiming support for a transformation.
-
-Coordinate units come from the chosen CRS. Reprojection does not improve source
-accuracy or change the units of unrelated attributes such as speed and building
-height. Web Mercator's coordinate units do not make it a suitable default for
-accurate ground-distance or area measurements. See the
-[PROJ Web Mercator definition](https://proj.org/en/stable/operations/projections/webmerc.html).
-
-DuckDB Spatial provides ST_Transform with an `always_xy` option. The foundation's
-shared Rust coordinate path uses DuckDB's validating WKB-to-GEOMETRY cast and,
-for explicit EPSG:3857 output, Spatial's PROJ-backed ST_Transform with XY enabled.
-It returns owned geometry values through the native output vectors. The default
-EPSG:4326 path performs no coordinate transformation. These are synthetic native
-proofs, not an implemented reader or CLI; other target CRSs are rejected for now.
-
-The pinned Spatial artifact exposes its revision and PROJ versions. Its embedded
-CRS database can be identified by artifact inspection, but SQL does not expose
-the selected operation pipeline or a runtime grid manifest. The full metadata
-proposal above therefore remains partly unresolved; no operation IDs or grid
-identities are fabricated. See [CRS evidence and gaps](docs/native-foundation.md#coordinate-path-and-provenance).
-A future CLI must call the same Rust path with its embedded DuckDB/Spatial session.
-
-## Output columns
-
-All profiles expose the following common columns. Profile-specific fields follow
-them in the order defined by the profile's schema version.
-
-| Column | Type | Meaning |
-|---|---|---|
-| `feature_id` | `VARCHAR` | Deterministic feature key within the profile contract. |
-| `osm_type` | `VARCHAR` | Primary source type: `node`, `way` or `relation`. |
-| `osm_id` | `BIGINT` | Primary source ID, interpreted together with its type. |
-| `osm_version` | `INTEGER` | Primary element version, NULL when absent. |
-| `name` | `VARCHAR` | Primary source name, NULL when absent. |
-| `geometry` | `GEOMETRY` | Reconstructed geometry; NULL for a rejected feature. |
-| `geometry_crs` | `VARCHAR` | Canonical requested output CRS, with the documented XY axis convention. |
-| `tags` | `MAP(VARCHAR, VARCHAR)` | Unmodified tags of the primary source element. |
-| `source_refs` | `STRUCT(osm_type VARCHAR, osm_id BIGINT, osm_version INTEGER)[]` | Unique contributing source references, including geometry dependencies. |
-| `status` | `VARCHAR` | `ok` or `rejected`. Warnings can accompany an `ok` row. |
-| `issues` | `STRUCT(severity VARCHAR, code VARCHAR, field VARCHAR, raw_value VARCHAR, message VARCHAR)[]` | Feature diagnostics; empty when none. |
-| `source_sha256` | `VARCHAR` | Hash identifying the source bytes used for projection. |
-| `profile_version` | `VARCHAR` | Effective profile rules. |
-| `schema_version` | `VARCHAR` | Effective column contract. |
-| `extension_version` | `VARCHAR` | Ducklocate release identity, including a revision for development builds. |
-
-`source_refs` identifies contributing elements; their full tags, member roles and
-ordered topology remain accessible in the pinned input. It is not a second copy
-of the complete OSM graph. Missing versions remain NULL. Carrying detailed lineage
-has a storage cost that must be measured rather than assumed negligible.
-
-Feature IDs must not depend on row order or worker scheduling. Their exact format
-belongs to the profile specification. Identity across snapshots is guaranteed only
-where that specification defines it; IDs are not universal cross-profile keys.
-
-By default, geometry uses WGS84 longitude/latitude in degrees: X is longitude,
-Y is latitude. An explicit CRS option changes the output coordinates and
-`geometry_crs` together. No implicit reprojection, simplification, geometry repair
-or representative-point substitution is performed. Area features retain their
-area geometry, including holes. Any future derived point must be separately
-identified.
-
-### Profile-specific fields
-
-These field families guide the first profile specifications; selection rules,
-enum mappings and relation/member deduplication still need individual contracts.
-The versions below have not been assigned or implemented.
-
-| Profile | Field examples | Geometry |
-|---|---|---|
-| `roads` | `road_class VARCHAR`, `surface VARCHAR`, `max_speed_kmh DOUBLE`, `oneway VARCHAR` | LineString / MultiLineString |
-| `buildings` | `building_type VARCHAR`, `levels DOUBLE`, `height_m DOUBLE` | Polygon / MultiPolygon |
-| `admin_areas` | `boundary_type VARCHAR`, `admin_level INTEGER` | Polygon / MultiPolygon |
-| `pois` | `categories VARCHAR[]` | Point, line or area, according to the source feature |
-| `barriers` | `barrier_type VARCHAR`, `access VARCHAR`, `max_width_m DOUBLE` | Point, line or area, according to the source feature |
-
-Typed fields do not replace source tags. For example, an unsupported conditional
-speed stays in `tags`, leaves `max_speed_kmh` NULL and produces a diagnostic. A
-missing access or oneway tag does not become confirmed permission or direction.
-Administrative level values alone do not establish equivalent hierarchies across
-countries. Road rows do not constitute a routing graph.
-
-## Quality and errors
-
-`on_error := 'fail'` stops execution when a selected feature cannot satisfy the
-profile's required reconstruction rules. `on_error := 'report'` instead emits a
-`rejected` row with its source identity, tags, provenance and diagnostics. Geometry
-and fields that cannot be established are NULL. A rejected feature is not silently
-dropped. Relation/member suppression explicitly defined by a profile is a separate
-selection rule, not an error policy.
-
-Optional attribute interpretation failures produce warnings and NULL typed values
-in either mode when the required feature can still be constructed. Features that
-do not match a profile are not rejections. Source elements used only as geometry
-dependencies do not automatically become output features.
-
-Materialize a review table to inspect the complete selected profile:
-
-```sql
-CREATE TABLE roads_review AS
-SELECT *
-FROM ducklocate_read('germany.osm.pbf', profile := 'roads', on_error := 'report');
-
-SELECT status, count(*) AS feature_count
-FROM roads_review
-GROUP BY status;
-
-SELECT r.feature_id, issue.severity, issue.code, issue.field, issue.raw_value
-FROM roads_review AS r,
-     UNNEST(r.issues) AS diagnostics(issue)
+SELECT r.feature_id, issue.code, issue.raw_value
+FROM roads r, UNNEST(r.issues) AS diagnostics(issue)
 ORDER BY r.feature_id, issue.code;
 ```
 
-The issues list uses `warning` and `error` severities, stable machine-readable
-codes and human-readable messages. `field` and `raw_value` may be NULL when an
-issue concerns geometry or a missing reference rather than one tag. Code examples
-are `missing_reference`, `invalid_geometry` and `unsupported_value`; their exact
-definitions must accompany implementation.
+Materialization and transactions belong to the caller. Roll back after a failed
+statement. CTAS adds no implicit constraints, indexes or metadata tables. Keep the
+recorded source hash and effective profile/schema/extension/CRS dependencies
+separately when retaining an empty table. Views and prepared statements scan
+again on each execution; a transaction does not freeze a live external source.
 
-Unreadable/corrupt input, unsupported PBF features, conflicting source records,
-hash mismatch, resource exhaustion and cancellation are statement errors in both
-modes. `report` does not convert technical failures into empty output. A client
-stream can receive rows before a later error, so it must not publish an incomplete
-stream as a completed dataset. Counts from LIMIT or filtered queries do not
-establish a full quality report or geographic completeness.
-
-## Store and index tables
-
-Materialization uses DuckDB's existing transaction and catalogue operations:
+## Public SQL interface
 
 ```sql
-BEGIN TRANSACTION;
-
-CREATE SCHEMA osm;
-
-CREATE TABLE osm.source AS
-SELECT * FROM ducklocate_source('germany.osm.pbf');
-
-CREATE TABLE osm.roads AS
-SELECT * FROM ducklocate_read('germany.osm.pbf', profile := 'roads');
-
-CREATE TABLE osm.buildings AS
-SELECT * FROM ducklocate_read('germany.osm.pbf', profile := 'buildings');
-
-COMMIT;
+ducklocate_profiles()
+ducklocate_read(path, profile := 'roads', profile_version := '1.0.0',
+                expected_sha256 := NULL, on_error := 'fail', crs := 'EPSG:4326')
 ```
 
-Run against a new target schema. If a statement fails, roll back the transaction.
-Do not replace an existing release implicitly. Keep the input file unchanged
-throughout the workflow: a database transaction does not freeze an external PBF.
-For automated reproducible builds, pass the recorded hash as `expected_sha256`
-to each reader and verify the resulting identities before committing.
+| Reader argument | Type | Exact default and validation |
+|---|---|---|
+| path | VARCHAR, positional | Required non-NULL/nonempty local regular file; no `:`, NUL, `*`, `?`, `[` or `]` (no URLs/globs). Relative paths and DuckDB `~` expansion are supported. |
+| profile | VARCHAR, named | `roads`; all other values and NULL rejected. |
+| profile_version | VARCHAR, named | `1.0.0`, the installed default; all other values and NULL rejected. |
+| expected_sha256 | VARCHAR, named | NULL means no assertion; otherwise exactly 64 hex characters, case insensitive. Empty/malformed/mismatching hashes fail. |
+| on_error | VARCHAR, named | `fail`; only `fail` and `report`, case sensitive, non-NULL. |
+| crs | VARCHAR, named | `EPSG:4326`; only exact `EPSG:4326` and `EPSG:3857`, non-NULL/nonempty. |
 
-CTAS does not add constraints or indexes automatically. Add indexes for actual
-queries, for example a Spatial R-tree index:
+All arguments must be bind-time constants of the declared SQL types. Unknown
+options and additional positional arguments fail. Binding/DESCRIBE/EXPLAIN
+validate configuration and declare the schema without opening the input.
+Execution validates and processes the entire source even for an empty selection.
+No filter/projection pushdown is claimed; LIMIT/WHERE do not guarantee reduced
+source work. Each invocation has private execution state and temporary storage.
 
-```sql
-CREATE INDEX roads_geometry_idx ON osm.roads USING RTREE (geometry);
+`ducklocate_profiles()` returns exactly one row for roads. Its schema is:
+`profile VARCHAR, profile_version VARCHAR, schema_version VARCHAR, is_default BOOLEAN,
+description VARCHAR, geometry_types VARCHAR[]`. No placeholder profiles appear.
 
-SELECT name, road_class
-FROM osm.roads
-WHERE ST_Intersects(geometry, ST_MakeEnvelope(13.3, 52.4, 13.5, 52.6));
+The reader exposes the existing common columns followed by `road_class VARCHAR`,
+`surface VARCHAR`, `max_speed_kmh DOUBLE`, `oneway VARCHAR`. The [complete ordered
+19-column schema and NULL rules](docs/roads-v1.md#exact-output-schema) are part of
+the profile contract. Original tags remain unchanged; interpreted scalars do not
+replace them. Feature IDs are `roads:way:<id>`, independent of CRS and snapshot.
+
+## Geometry and errors
+
+Select ways containing `highway`, including empty/unknown values, except exact
+`area=yes`. Closure alone leaves a LineString. Resolve nodes independently of
+selection and retain source reference order. Geometry is never silently reversed,
+repaired, clipped or simplified. Relations, road areas, access inference and
+routing topology are outside roads 1.0.0.
+
+Default coordinates are WGS84 longitude/latitude, XY degrees. Required geometry
+needs all references, at least two references and two distinct coordinate pairs.
+Validate every coordinate, including interior vertices, before and after any
+transformation. Missing references/invalid required geometry fail in `fail` mode;
+`report` emits a `rejected` row with NULL geometry and a stable diagnostic.
+Warnings for unsupported optional attributes leave the scalar NULL in both modes.
+Raw tags, identity and resolved lineage survive rejection. See the [exact speed,
+direction and diagnostic rules](docs/roads-v1.md#speed-and-direction).
+
+Corrupt/truncated input, unsupported required PBF features, duplicate/conflicting
+records, hash mismatch, I/O/resource failures and interruption remain statement
+errors. A partial client stream must not be published as a completed dataset.
+SQL ordering requires ORDER BY. Counts from filtered/LIMIT queries do not establish
+source completeness or a full quality report.
+
+## Offline reprojection
+
+Only EPSG:4326 and EPSG:3857 are qualified. EPSG:3857 uses the same shared
+Spatial/PROJ coordinate path as the foundation. It requires an **already installed**
+Spatial `a3dbcd1781`, runtime PROJ `9.1.1`, compiled PROJ
+`Rel. 9.1.1, December 1st, 2022`; mismatching identities fail. The test/setup
+artifact is hash-pinned. Operation pipeline/grid identities remain unavailable
+through the selected SQL API; the reader does not fabricate them or claim full
+transformation provenance. See [CRS evidence](docs/native-foundation.md#coordinate-path-and-provenance).
+
+After explicit `setup_spatial.py`, this is runnable from the repository root:
+
+```sh
+duckdb -unsigned <<SQL
+SET extension_directory = '$PWD/.cache/roads-extensions';
+INSTALL '$PWD/.cache/spatial/spatial.duckdb_extension';
+LOAD spatial;
+LOAD '$PWD/build/release/ducklocate.duckdb_extension';
+SELECT feature_id, ST_AsText(geometry), geometry_crs
+FROM ducklocate_read('test/fixtures/roads/valid.osm.pbf', crs := 'EPSG:3857')
+WHERE osm_id = 100;
+SQL
 ```
 
-The envelope uses longitude/latitude degrees. Geometry distances and areas are
-not implicitly metres. R-tree use depends on the predicate and query plan; an
-index is not a blanket performance guarantee.
+The reader's isolated transformation session inherits `extension_directory`,
+disables automatic installation/loading, loads installed Spatial, then disables
+external access. No grids or network acquisition occur during reads. The pole
+latitudes are rejected for Web Mercator; a transformation failure never produces
+unchanged coordinates labelled with the target CRS. Attribute units (km/h) do not
+change with geometry CRS. Web Mercator metres are not accurate ground distances.
 
-## Reproducibility
+## Snapshot identity, security and limits
 
-A repeatable projection records the source SHA-256, effective profile version,
-schema version, extension identity, output CRS/axis convention, transformation
-metadata when applicable and exact DuckDB/Spatial versions. Record
-download provenance separately; `latest` provider URLs can change their content.
-The reader computes source identity even when no expected hash was supplied.
+The caller's DuckDB file-system policy controls source access, including
+`enable_external_access`, `allowed_paths`, `allowed_directories` and disabled
+file systems. Local byte access does not bypass it through Rust file reads.
+A private copy is hashed while being written; projection reads only that copy.
+Replacing/mutating the input cannot label later projected bytes with an earlier
+hash. Concurrent mutation during copying can create a mixed snapshot, whose hash
+still identifies precisely the bytes projected; use `expected_sha256` to assert
+an externally established snapshot.
 
-An expected hash mismatch fails the statement. Implementations must derive the
-reported identity from the same source bytes they project and prevent a changed
-input from being accepted as the asserted snapshot. No process-global selected
-file or most-recent-download state participates in a query.
+Hard scan limits include **512 MiB input**, **32 MiB PBF blocks**, **10 million
+elements**, **10,000 references per element**, **4,096 tags / 64 KiB tag bytes**,
+and a **2 GiB on-disk index**. Rust holds bounded block/feature buffers; SQLite
+uses an 8 MiB page-cache target and no mmap. These allocations are independent of
+DuckDB's memory limit. This first implementation deliberately rejects some valid
+large inputs. It makes no national-scale performance claim.
 
-Identical declared inputs and versions must produce the same logical rows.
-SQL ordering requires ORDER BY. This contract does not promise byte-identical
-DuckDB files, complete OSM coverage or compatibility with later profile versions.
-An empty profile result remains valid and has the declared schema; retain the
-source table and effective profile catalogue for metadata when no feature rows exist.
+Temporary files live in an OS-private `ducklocate-` directory and are removed on
+completion, failure, early termination and cancellation. Abrupt process death can
+leave files for OS/manual cleanup. The pinned C API context cannot poll
+cancellation; bounded snapshot/index preparation may delay interruption until
+its callback returns. Full limits, supported PBF encodings and lifecycle details
+are in the [roads contract](docs/roads-v1.md#execution-security-and-resource-limits).
 
-## Scope and implementation questions
+## Future interface proposals
 
-The first interface design covers native SQL access and the `osm2duckdb build`
-CLI, local snapshots, named-region acquisition, profile discovery, typed
-projection, optional output reprojection, feature diagnostics and materialization.
-Profile configuration files, custom clipping, incremental updates, combined-profile
-single-pass builds and additional providers remain separate design work.
+The following functions are **not registered or implemented**:
 
-The foundation verifies named arguments, bind-time schemas, native GEOMETRY and
-nested types. Before implementing the remaining interface, resolve and verify:
+| Proposed interface | Intended purpose |
+|---|---|
+| ducklocate_regions(provider := 'geofabrik') | Explicit provider catalogue lookup; network access. |
+| ducklocate_download(region, directory := ..., provider := 'geofabrik') | Explicit snapshot acquisition to a new directory. |
+| ducklocate_source(path) | Local snapshot/manifest inspection. |
+| ducklocate_import(source := ... / region := ..., profiles := [...], schema := ..., crs := ...) | Convenience materialization with atomic catalogue behavior. |
+| osm2duckdb build --source ... / --region ... --objects ... --output ... | Future CLI using shared Rust rules. |
 
-1. Apply the verified native adapters to actual profile rows and bounded source processing.
-2. Download callback lifecycle, cancellation, publication races and external-file access under DuckDB's security settings.
-3. The first complete profile contract and hand-written acceptance fixture, including relation handling, identity and diagnostics.
-4. Bounded reference-resolution storage, source snapshot consistency and the measured cost of hashing and lineage.
-5. Source-manifest format and exact-version compatibility checks.
-6. Resolve the proposed CALL import limitation, using explicit caller-owned transactions or separately approving a query-pragma interface; qualify CLI publication and shared-core equivalence when the CLI exists.
-7. Extend the qualified offline EPSG:4326/3857 path only after defining operation/accuracy policy and obtaining the missing runtime operation/grid provenance.
+Buildings, administrative areas, POIs, barriers and other profiles need their own
+versioned contracts. Downloads, named regions, CLI, incremental updates and import
+are outside this milestone. The C API callback has no caller-transaction SQL
+executor; the [query-pragma probe](docs/native-foundation.md#atomic-import-investigation)
+remains an isolated experiment, not a public import API. Caller-owned SQL and
+transactions are the implemented materialization workflow.
 
-These remaining items are integration and design gates. The foundation evidence
-is recorded separately; there is no REST service in this design.
-
-## Development and references
-
-[Concept.md](Concept.md) records product scope and durable choices. This README
-documents the implemented foundation and remaining SQL/CLI proposal.
-[Native foundation](docs/native-foundation.md) records setup and measured compatibility.
-[AGENTS.md](AGENTS.md) points to repository
-instructions and the focused development skills. A software license has not yet
-been selected; OSM input and derivative data have their own licensing obligations.
-
-Official references used for this proposal:
-
-- [DuckDB Rust extension template](https://github.com/duckdb/extension-template-rs/tree/a679601f8e133db7546777c6637bc7a6c2d2780e): bind-time result columns and native extension lifecycle.
-- [DuckDB CALL](https://duckdb.org/docs/2.0/sql/statements/call), [CREATE TABLE](https://duckdb.org/docs/2.0/sql/statements/create_table) and [transactions](https://duckdb.org/docs/2.0/sql/statements/transactions): SQL invocation and materialization.
-- [DuckDB Spatial](https://duckdb.org/docs/2.0/core_extensions/spatial/overview), [ST_Transform](https://duckdb.org/docs/2.0/core_extensions/spatial/functions#st_transform) and [R-tree indexes](https://duckdb.org/docs/2.0/core_extensions/spatial/r-tree_indexes): geometry, coordinate transformations and indexing.
-- [Geofabrik technical documentation](https://download.geofabrik.de/technical.html) and [download catalogue](https://download.geofabrik.de/index-v1-nogeom.json): region IDs, snapshot URLs and extract semantics.
-- [OpenStreetMap copyright and license](https://www.openstreetmap.org/copyright): data origin, licensing and attribution.
+[AGENTS.md](AGENTS.md) links the project skills. Software licensing is still an
+open project choice; [OSM attribution and data licensing](https://www.openstreetmap.org/copyright)
+are separate obligations. Synthetic fixtures contain no real OSM data.

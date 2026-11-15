@@ -1,3 +1,7 @@
+> This is historical foundation evidence. The roads milestone adds the public reader
+> and a real catalogue row; see [current acceptance evidence](roads-verification.md).
+> Its shared CRS path now checks every WKB coordinate, including interior vertices.
+
 # Native foundation: DuckDB 2.0.0
 
 Verified 15 November 2026. This is the first integration milestone, not an OSM

@@ -23,6 +23,7 @@ CONFIG = {
     'autoinstall_known_extensions': 'false',
     'autoload_known_extensions': 'false',
     'threads': '2',
+    'extension_directory': str(ROOT / '.cache/roads-extensions'),
 }
 
 
@@ -128,6 +129,9 @@ def geometry_checks(conn):
     assert conn.execute(f"SELECT ST_IsEmpty(geometry) FROM ducklocate_probe_rows(1, geometry_wkb := ?, crs := 'EPSG:3857', spatial_path := {literal(SPATIAL)})", [empty]).fetchone() == (True,)
     invalid_point = struct.pack('<BIdd', 1, 1, 2., 91.)
     fails(conn, f"SELECT * FROM ducklocate_probe_rows(1, geometry_wkb := from_hex('{invalid_point.hex()}'), crs := 'EPSG:3857', spatial_path := {literal(SPATIAL)})", 'transformation_failed')
+    # Interior non-finite coordinates must not hide behind finite outer bounds.
+    invalid_middle = struct.pack('<BII6d', 1, 2, 3, 2., 49., float('nan'), 50., 3., 50.)
+    fails(conn, f"SELECT * FROM ducklocate_probe_rows(1, geometry_wkb := from_hex('{invalid_middle.hex()}'), crs := 'EPSG:3857', spatial_path := {literal(SPATIAL)})", 'transformation_failed')
     fails(conn, "SELECT * FROM ducklocate_probe_rows(1, geometry_wkb := from_hex('0101'))", 'Could not convert BLOB to GEOMETRY')
     return {'control_point': [x, y], 'proj': scalar(conn, 'SELECT DuckDB_Proj_Version()')}
 
@@ -200,7 +204,7 @@ def main():
     probes = args.expect_mode == 'probe'
     with connect() as conn:
         public = {r[0] for r in conn.execute("SELECT function_name FROM duckdb_functions() WHERE function_name LIKE 'ducklocate_%'").fetchall()}
-        expected = {'ducklocate_profiles'}
+        expected = {'ducklocate_profiles', 'ducklocate_read'}
         if probes:
             expected.update({'ducklocate_probe_rows', 'ducklocate_probe_transaction'})
         assert public == expected, (
@@ -210,7 +214,9 @@ def main():
         assert duckdb.__version__ == '2.0.0'
         identity = metadata_checks()
         assert conn.execute('SELECT version(), platform FROM pragma_platform()').fetchone() == ('v2.0.0', 'osx_arm64')
-        assert scalar(conn, 'SELECT count(*) FROM ducklocate_profiles()') == 0
+        assert conn.execute('SELECT profile,profile_version,schema_version,is_default,geometry_types FROM ducklocate_profiles()').fetchall() == [('roads','1.0.0','1.0.0',True,['LineString'])]
+        assert hashlib.sha256(SPATIAL.read_bytes()).hexdigest() == SPATIAL_SHA
+        conn.execute(f'INSTALL {literal(SPATIAL)}')
         result = {'artifact': str(ARTIFACT), 'sha256': hashlib.sha256(ARTIFACT.read_bytes()).hexdigest(), 'probes': probes, 'identity': identity}
         if probes:
             assert hashlib.sha256(SPATIAL.read_bytes()).hexdigest() == SPATIAL_SHA
@@ -227,6 +233,8 @@ def main():
             with connect(db) as conn:
                 conn.execute(f'LOAD {literal(SPATIAL)}')
                 assert scalar(conn, 'SELECT ST_AsText(geometry) FROM persistent WHERE id=0') == 'POINT (2 49)'
+    from roads_checks import run
+    result.update(run(connect, identity))
     print(json.dumps(result, indent=2))
 
 
