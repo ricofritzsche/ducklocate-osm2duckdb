@@ -1,4 +1,4 @@
-# Ducklocate: OSM to DuckDB
+# DuckLocate: OSM to DuckDB
 
 A native DuckDB extension written in Rust that projects OpenStreetMap snapshots
 into typed, queryable features with geometry, original tags and source lineage.
@@ -16,6 +16,7 @@ inspection, convenience import, CLI and updates remain proposals.
 - [Real Bremen roads evaluation and resource baseline](docs/bremen-roads-evaluation.md)
 - [Native foundation and CRS provenance limits](docs/native-foundation.md)
 - [Concept and future scope](Concept.md)
+- [Documentation website: local preview and content structure](website/README.md)
 
 ## Build and test
 
@@ -76,7 +77,7 @@ SQL
 Use your own existing snapshot path in place of the synthetic fixture. The
 reader returns native `GEOMETRY`; Spatial is unnecessary for default reads.
 Load a matching local Spatial artifact to use `ST_AsText`, spatial predicates
-or an R-tree index. In a session with Ducklocate loaded:
+or an R-tree index. In a session with DuckLocate loaded:
 
 ```sql
 DESCRIBE SELECT * FROM ducklocate_read('test/fixtures/roads/valid.osm.pbf');
@@ -261,6 +262,16 @@ executor; the [query-pragma probe](docs/native-foundation.md#atomic-import-inves
 remains an isolated experiment, not a public import API. Caller-owned SQL and
 transactions are the implemented materialization workflow.
 
-[AGENTS.md](AGENTS.md) links the project skills. Software licensing is still an
-open project choice; [OSM attribution and data licensing](https://www.openstreetmap.org/copyright)
+## License and legal information
+
+Copyright 2026 Rico Fritzsche and DuckLocate contributors. Original code,
+documentation and website assets are licensed under the [Apache License 2.0](LICENSE),
+unless otherwise indicated. See [NOTICE](NOTICE) and
+[third-party notices](THIRD_PARTY_NOTICES.md) for scope and dependencies.
+[OSM attribution and data licensing](https://www.openstreetmap.org/copyright)
 are separate obligations. Synthetic fixtures contain no real OSM data.
+
+The website provides a [legal notice and contact](docs/site/legal/legal-notice.md),
+[privacy notice](docs/site/legal/privacy.md), and
+[licences and attribution](docs/site/legal/licences.md).
+[AGENTS.md](AGENTS.md) links the project skills.

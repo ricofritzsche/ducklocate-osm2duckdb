@@ -7,3 +7,10 @@
 *.duckdb.wal
 *.duckdb_extension
 __pycache__/
+/.idea/
+/identifier.db
+/website/node_modules/
+/website/.astro/
+/website/.generated/
+/website/dist/
+/website/public/legal/

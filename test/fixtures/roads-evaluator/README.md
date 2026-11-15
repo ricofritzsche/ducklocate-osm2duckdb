@@ -2,7 +2,7 @@
 
 These small XML sources are hand-authored, artificial data for this repository.
 The evaluator tests convert them with the existing Osmium CLI into temporary PBFs
-outside Git. Neither Ducklocate's reader nor the synthetic protobuf writer supplies
+outside Git. Neither DuckLocate's reader nor the synthetic protobuf writer supplies
 these inputs or expected results. No downloads or external OSM data are involved.
 
 - `zero-selected.osm`: two nodes, two ways and one relation. One way lacks

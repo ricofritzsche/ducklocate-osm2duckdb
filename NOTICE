@@ -1,0 +1,14 @@
+DuckLocate: OSM to DuckDB
+Copyright 2026 Rico Fritzsche and DuckLocate contributors
+
+Original DuckLocate source code, documentation, website code and artwork are
+licensed under the Apache License, Version 2.0, unless otherwise indicated.
+See LICENSE for the complete terms, including patent provisions, redistribution
+conditions, the disclaimer of warranty and the limitation of liability.
+
+Third-party dependencies and separately identified materials retain their own
+copyright notices and licenses. See THIRD_PARTY_NOTICES.md.
+
+OpenStreetMap data is copyright OpenStreetMap contributors and is available
+under the Open Database License (ODbL) 1.0. It is not covered by DuckLocate's
+Apache-2.0 license. See https://www.openstreetmap.org/copyright.

@@ -1,8 +1,8 @@
-# Ducklocate OSM to DuckDB
+# DuckLocate OSM to DuckDB
 
 ## Purpose
 
-Ducklocate is an open-source native DuckDB extension written in Rust. It turns
+DuckLocate is an open-source native DuckDB extension written in Rust. It turns
 OpenStreetMap data into structured tables with typed attributes, geometries and
 source references. Users select the region and datasets through SQL inside
 DuckDB or the osm2duckdb CLI. Both interfaces share one Rust projection
@@ -96,6 +96,37 @@ Keep public signatures and examples in the README rather than duplicating them
 here. Design work may refine the proposal; record settled scope choices here and
 retain an explicit distinction between proposed behavior and implementation evidence.
 
+## Documentation website
+
+The documentation site lives in this repository: authored overview and navigation
+pages under `docs/site/`, with Astro/Starlight configuration and design under
+`website/`. It renders the README, profile contracts and development evidence from
+their canonical source files rather than maintaining separate copies. The README
+remains the public SQL/CLI reference. Documentation changes accompany implemented
+features; proposals remain explicitly labelled. The documentation workflow builds
+and checks pull requests, then publishes `main` to
+[GitHub Pages](https://ricofritzsche.github.io/ducklocate-osm2duckdb/).
+A custom DuckLocate product subdomain remains unconfigured.
+
+## Licensing and website operator
+
+Original project code, documentation, website code and artwork use
+[Apache License 2.0](LICENSE), matching the
+[GridPin DuckDB extension's license choice](https://github.com/gridpin/duckdb-gridpin/blob/main/Cargo.toml).
+[NOTICE](NOTICE) and [third-party notices](THIRD_PARTY_NOTICES.md)
+preserve the distinction between project materials, dependencies and OSM data.
+Apache 2.0 permits commercial reuse even though this project is operated on a
+non-commercial basis. OSM input and derived data retain their separate ODbL
+obligations.
+
+Rico Fritzsche operates the community project's website from Palma, Spain.
+Canonical [operator/contact](docs/site/legal/legal-notice.md),
+[privacy](docs/site/legal/privacy.md) and [licensing](docs/site/legal/licences.md)
+pages are linked from every documentation footer. The static site uses local
+interface preferences and browser-side search, without visitor analytics,
+advertising or third-party embeds. GitHub Pages hosting processing is described
+for the public deployment; local previews remain available for development.
+
 ## Open choices
 
 Resolve these as concrete tasks need them, with a short rationale and evidence:
@@ -108,7 +139,7 @@ Resolve these as concrete tasks need them, with a short rationale and evidence:
 - External profile format and schema/profile compatibility policy.
 - Incremental updates, deletion handling and publication semantics.
 - Broader platforms and future embedded CLI packaging beyond the pinned macOS arm64 native foundation.
-- Software license and community-distribution route. Software and OSM data licensing are separate.
+- Community-distribution route and native binary dependency-notice packaging.
 
 The README distinguishes the implemented local-PBF roads reader and profile
 catalogue from the remaining proposed SQL and CLI interfaces. No supported-platform matrix or

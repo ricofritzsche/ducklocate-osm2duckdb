@@ -1,4 +1,4 @@
-"""Independent real-input reference: Osmium XML, never Ducklocate's PBF code.
+"""Independent real-input reference: Osmium XML, never DuckLocate's PBF code.
 
 Keep the reference database outside Git. Nodes are indexed before comparison, so
 reference resolution does not depend on input ordering. No geometry factory,

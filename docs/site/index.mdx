@@ -1,0 +1,71 @@
+---
+title: OpenStreetMap, ready for SQL.
+description: Turn local OpenStreetMap snapshots into typed, queryable features inside DuckDB.
+tableOfContents: false
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+<p class="overview-lead">Explore OpenStreetMap as structured data. Select a profile, read a local snapshot, and query features with geometry, original tags, and source lineage.</p>
+
+<div class="release-strip" aria-label="Current implementation">
+  <span class="status-dot"></span>
+  <strong>Development build</strong>
+  <span>DuckDB 2.0.0</span>
+  <span>macOS arm64 verified</span>
+</div>
+
+<div class="overview-actions">
+  <a class="primary-action" href="./getting-started/">Run your first query <span aria-hidden="true">↗</span></a>
+  <a class="secondary-action" href="./reference/">Explore the SQL reference <span aria-hidden="true">→</span></a>
+</div>
+
+<div class="projection-flow" aria-label="Projection workflow">
+  <div><span class="flow-number">01 / SOURCE</span><strong>A local OSM snapshot</strong><span>Start with an existing .osm.pbf file.</span></div>
+  <div><span class="flow-number">02 / PROFILE</span><strong>Documented interpretation</strong><span>Selection, typed fields, geometry, and diagnostics.</span></div>
+  <div><span class="flow-number">03 / QUERY</span><strong>Features inside DuckDB</strong><span>Read with SQL. Save tables when you need them.</span></div>
+</div>
+
+## What you can do today
+
+<CardGrid>
+  <Card title="Read roads" icon="database">
+    Project highway-tagged ways into LineStrings with road class, surface, speed, and direction fields. Roads 1.0.0 is the first implemented profile.
+  </Card>
+  <Card title="Keep the source context" icon="document">
+    Inspect original tags, OSM references, the source hash, and diagnostics alongside interpreted values. Unsupported optional values stay visible.
+  </Card>
+  <Card title="Work locally" icon="laptop">
+    Read an existing file without downloads. Materialize results with DuckDB SQL and caller-owned transactions.
+  </Card>
+  <Card title="Understand the geometry" icon="random">
+    Read native GEOMETRY in WGS84 longitude/latitude. Explicit Web Mercator output uses the qualified, locally installed Spatial dependency.
+  </Card>
+</CardGrid>
+
+## Start with a small snapshot
+
+The repository includes a synthetic roads fixture for a first query. The current
+reader accepts inputs up to **512 MiB**, with additional record and index limits.
+National-scale performance and geographic completeness have not been established.
+The [Bremen evaluation](../bremen-roads-evaluation.md) records a small real-input
+correctness and resource baseline.
+
+There is **no community installation yet**. Getting started currently means building
+and loading a local development artifact. Default reads need no Spatial extension;
+reprojection and spatial functions have additional prerequisites.
+
+<div class="reading-links">
+  <LinkCard title="Getting started" description="Build, load, and query the supplied fixture." href="./getting-started/" />
+  <LinkCard title="Roads profile" description="Selection rules, the exact schema, and known limits." href="./profiles/roads/" />
+</div>
+
+## Where the project is going
+
+DuckLocate is the family name. This project focuses on **OSM to DuckDB** through a
+native Rust extension. A future `osm2duckdb` CLI is intended to share the same
+projection implementation.
+
+Additional profiles, named-region downloads, convenience import, and incremental
+updates remain proposals. Follow the [roadmap](./project/roadmap.md) for the boundary
+between current behavior and future direction.

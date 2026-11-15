@@ -1,4 +1,4 @@
-# Ducklocate OSM to DuckDB
+# DuckLocate OSM to DuckDB
 
 An open-source native DuckDB extension written in Rust, with an osm2duckdb CLI.
 Both project OpenStreetMap data into structured, queryable datasets using shared

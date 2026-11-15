@@ -1,4 +1,4 @@
-//! Shared Ducklocate functionality; the native crate only owns the entrypoint.
+//! Shared DuckLocate functionality; the native crate only owns the entrypoint.
 mod catalogue;
 pub mod coordinates;
 mod output;

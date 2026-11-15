@@ -1,0 +1,28 @@
+---
+import DefaultFooter from '@astrojs/starlight/components/Footer.astro';
+import { pageUrl } from '../../scripts/prepare-content.mjs';
+---
+
+<DefaultFooter {...Astro.props} />
+<nav class="legal-links" aria-label="Legal information">
+  <span>© 2026 DuckLocate contributors</span>
+  <a href={pageUrl('legal/legal-notice')}>Legal notice &amp; contact</a>
+  <a href={pageUrl('legal/privacy')}>Privacy</a>
+  <a href={pageUrl('legal/licences')}>Licences &amp; attribution</a>
+</nav>
+
+<style>
+  .legal-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem 1.25rem;
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--sl-color-gray-5);
+    color: var(--sl-color-gray-2);
+    font-size: var(--sl-text-xs);
+  }
+  a { color: inherit; text-underline-offset: 0.2em; }
+  a:hover { color: var(--sl-color-white); }
+  a:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 4px; }
+</style>

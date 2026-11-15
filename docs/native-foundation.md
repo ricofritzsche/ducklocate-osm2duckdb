@@ -410,7 +410,8 @@ been weakened to fit the chosen binding.
 
 No platform beyond macOS arm64, other DuckDB release, community publication,
 Wasm, CLI packaging, large extract or performance claim has been qualified. The
-software license remains undecided. Real parser cancellation, bounded dependency
+software license was undecided during this milestone; it is now [Apache 2.0](../LICENSE).
+Real parser cancellation, bounded dependency
 resolution, snapshot stability/hashing and complete CRS provenance need further
 work; synthetic chunk bounds are not proof of those product properties.
 

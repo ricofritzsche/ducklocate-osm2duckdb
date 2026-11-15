@@ -90,7 +90,7 @@ Spatial bytes. No installation is performed during evaluation.
 
 [`roads_oracle.py`](../scripts/roads_oracle.py) runs
 `osmium cat SOURCE -f osm --no-progress`, checks its exit status and streams the
-decoded XML into a separate SQLite reference. No Ducklocate decoder, Rust rule
+decoded XML into a separate SQLite reference. No DuckLocate decoder, Rust rule
 function, synthetic fixture encoder, geometry assembler or node-location filter
 supplies expected data. All nodes and versions are indexed before resolving ways,
 including dependencies outside the selection and regardless of record order.
@@ -404,7 +404,7 @@ warnings retain their order before the geometry error. Successful-coordinate
 tolerances remain absolute 1e-12 degree / 1e-6 metre, zero relative tolerance.
 
 The [literal XML sources and their derivations](../test/fixtures/roads-evaluator/README.md)
-are independent of Ducklocate's decoder and the synthetic protobuf writer.
+are independent of DuckLocate's decoder and the synthetic protobuf writer.
 Osmium converts them to temporary PBFs outside Git. Before the evaluator fixes,
 the five initial regression tests failed: zero-selected and node-only empty
 profile results raised `KeyError: 'selected'`; a selected road without relations
