@@ -22,6 +22,7 @@ use the same Rust projection code, profile definitions and output schemas.
 - [Discover profiles](#discover-profiles)
 - [Choose a source](#choose-a-source)
 - [Read a profile](#read-a-profile)
+- [Coordinate reference systems](#coordinate-reference-systems)
 - [Output columns](#output-columns)
 - [Quality and errors](#quality-and-errors)
 - [Store and index tables](#store-and-index-tables)
@@ -113,6 +114,7 @@ osm2duckdb build \
 | `--objects` | Required comma-separated profile names. |
 | `--output` | Required destination DuckDB database file. |
 | `--schema` | Output schema; defaults to `main`. |
+| `--crs` | Optional output CRS, such as `EPSG:3857`; defaults to `EPSG:4326`. |
 
 Exactly one of `--region` and `--source` is required. Unknown or unavailable
 profiles are errors. Each selected profile uses its installed default version;
@@ -130,6 +132,10 @@ Publish the output only after the complete build succeeds and the database has
 been closed. Failures return a nonzero exit status and must not leave an output
 file presented as a completed build. Downloads/cache files are separate artifacts.
 The completion summary reports the output path, source hash and per-profile counts.
+
+The same output CRS applies to every selected profile. See
+[coordinate reference systems](#coordinate-reference-systems) for examples,
+axis order and transformation metadata.
 
 The CLI and extension share projection rules, geometry, diagnostics and schema
 definitions. The CLI may use embedded DuckDB; users do not need to run a database
@@ -176,6 +182,10 @@ must be unique and available. The default download provider is Geofabrik. Local
 source input does not use the network. The schema is an identifier, not a SQL
 fragment; it may already exist, but none of the output tables may exist.
 
+An optional `crs VARCHAR` argument selects the output CRS for all imported tables;
+it defaults to `EPSG:4326`. Explicit NULL or an empty CRS is rejected. The same
+transformation contract applies to CLI builds, SQL imports and direct reads.
+
 The operation creates one table per profile and the two metadata tables described
 in the CLI contract. All profiles use one source snapshot and their installed
 default versions. It uses the reader's default `fail` policy. Table writes form
@@ -184,7 +194,8 @@ set. Downloaded source files are not rolled back with database changes.
 
 The result contains one summary row per profile: `profile VARCHAR`,
 `profile_version VARCHAR`, `schema_version VARCHAR`, `table_name VARCHAR`,
-`row_count UBIGINT` and `source_sha256 VARCHAR`. Results describe completed tables,
+`row_count UBIGINT`, `source_sha256 VARCHAR` and `geometry_crs VARCHAR`.
+Results describe completed tables,
 not intermediate progress. Native support for catalogue writes in the caller's
 transaction must be verified before implementing this convenience operation;
 running independent writes on a second connection is not an equivalent substitute.
@@ -322,12 +333,13 @@ FROM ducklocate_read('germany.osm.pbf', profile := 'buildings');
 | `profile_version` | `VARCHAR` | Installed default | Exact advertised profile version. |
 | `expected_sha256` | `VARCHAR` | NULL | Optional 64-character hexadecimal hash to verify. |
 | `on_error` | `VARCHAR` | `'fail'` | Feature-reconstruction policy: `fail` or `report`. |
+| `crs` | `VARCHAR` | `'EPSG:4326'` | Output geometry CRS; source coordinates remain WGS84. |
 
 Arguments must be known at bind time; the profile determines the result columns.
 Required arguments reject NULL and empty values. Omitted `profile_version` selects
 the catalogue default; explicit NULL is rejected. `expected_sha256 := NULL` means
-no caller-supplied hash assertion. Unknown options, profiles, versions and error
-modes fail explicitly.
+no caller-supplied hash assertion. Explicit NULL or an empty CRS is rejected.
+Unknown options, profiles, versions and error modes fail explicitly.
 
 Each invocation projects one profile, with a stable schema for that version. To
 read roads and buildings, make two calls rather than combining unrelated fields
@@ -337,6 +349,63 @@ The reader resolves referenced elements before constructing geometry. This can
 require multiple passes and temporary indexes. LIMIT, column selection and WHERE
 clauses do not promise a proportional reduction in source processing. A view
 re-executes its reader; separate profile calls are not guaranteed to share work.
+
+## Coordinate reference systems
+
+OSM source coordinates are WGS84. By default, output remains `EPSG:4326` in
+longitude/latitude degrees. Optional reprojection is selected with `--crs` on the
+CLI or `crs :=` in SQL. It is independent of selecting an object/profile: the
+`buildings` profile still describes buildings whichever output CRS is chosen.
+
+For example, write Web Mercator geometries for map use:
+
+```sh
+osm2duckdb build \
+  --region germany \
+  --objects roads,buildings,barriers \
+  --crs EPSG:3857 \
+  --output germany.duckdb
+```
+
+The SQL convenience call uses the same option:
+
+```sql
+CALL ducklocate_import(
+    region := 'germany',
+    profiles := ['roads', 'buildings', 'barriers'],
+    schema := 'osm',
+    crs := 'EPSG:3857'
+);
+```
+
+Or transform the output of a direct read:
+
+```sql
+SELECT name, geometry, geometry_crs
+FROM ducklocate_read('germany.osm.pbf', profile := 'roads', crs := 'EPSG:3857');
+```
+
+The proposed contract is:
+
+- Accept EPSG authority codes for supported two-dimensional horizontal CRSs. No automatic CRS selection from a region name. Custom pipelines, vertical transformations and coordinate epochs need separate specifications.
+- Use XY order consistently: longitude/latitude for default geographic output, easting/northing for conventional projected output. A CRS authority's axis declaration must not silently swap coordinates.
+- Transform reconstructed geometry once, after profile geometry assembly. Preserve input files, tags, source IDs and lineage; changing output CRS alone does not change feature IDs or the source hash.
+- Keep `geometry_crs` alongside geometry and persist the source/output CRS, axis convention and transformation identity in build metadata, including for empty tables. Do not assume a GEOMETRY value alone supplies this provenance.
+- Record the selected coordinate operation, DuckDB Spatial/PROJ versions, CRS database identity and required grid identities when applicable. The source hash and target EPSG code alone are insufficient for reproducing a transformed result.
+- Reject invalid CRS configuration or unavailable required transformation resources as statement/build errors in either error mode. A feature that produces invalid or non-finite transformed coordinates fails in `fail` mode or becomes a rejected row with `transformation_failed` in `report` mode. Never label unchanged coordinates with a requested target CRS after a failed transformation.
+- Keep transformation offline. Grid acquisition is explicit setup work; reading a local file with a requested CRS must not trigger a network download. The operation-selection and accuracy policy must be specified and tested before claiming support for a transformation.
+
+Coordinate units come from the chosen CRS. Reprojection does not improve source
+accuracy or change the units of unrelated attributes such as speed and building
+height. Web Mercator's coordinate units do not make it a suitable default for
+accurate ground-distance or area measurements. See the
+[PROJ Web Mercator definition](https://proj.org/en/stable/operations/projections/webmerc.html).
+
+DuckDB Spatial provides ST_Transform with an `always_xy` option. The intended
+integration reuses its PROJ-backed transformation facilities; exact Rust access,
+operation selection and metadata capture remain integration checks. A separate
+coordinate-projection implementation for the CLI would violate the shared-core
+contract. The default path performs no coordinate transformation.
 
 ## Output columns
 
@@ -351,6 +420,7 @@ them in the order defined by the profile's schema version.
 | `osm_version` | `INTEGER` | Primary element version, NULL when absent. |
 | `name` | `VARCHAR` | Primary source name, NULL when absent. |
 | `geometry` | `GEOMETRY` | Reconstructed geometry; NULL for a rejected feature. |
+| `geometry_crs` | `VARCHAR` | Canonical requested output CRS, with the documented XY axis convention. |
 | `tags` | `MAP(VARCHAR, VARCHAR)` | Unmodified tags of the primary source element. |
 | `source_refs` | `STRUCT(osm_type VARCHAR, osm_id BIGINT, osm_version INTEGER)[]` | Unique contributing source references, including geometry dependencies. |
 | `status` | `VARCHAR` | `ok` or `rejected`. Warnings can accompany an `ok` row. |
@@ -369,10 +439,12 @@ Feature IDs must not depend on row order or worker scheduling. Their exact forma
 belongs to the profile specification. Identity across snapshots is guaranteed only
 where that specification defines it; IDs are not universal cross-profile keys.
 
-Geometry uses WGS84 longitude/latitude in degrees: X is longitude, Y is latitude.
-No implicit reprojection, simplification, geometry repair or representative-point
-substitution is performed. Area features retain their area geometry, including
-holes. Any future derived point must be a separately identified field.
+By default, geometry uses WGS84 longitude/latitude in degrees: X is longitude,
+Y is latitude. An explicit CRS option changes the output coordinates and
+`geometry_crs` together. No implicit reprojection, simplification, geometry repair
+or representative-point substitution is performed. Area features retain their
+area geometry, including holes. Any future derived point must be separately
+identified.
 
 ### Profile-specific fields
 
@@ -483,7 +555,8 @@ index is not a blanket performance guarantee.
 ## Reproducibility
 
 A repeatable projection records the source SHA-256, effective profile version,
-schema version, extension identity and exact DuckDB/Spatial versions. Record
+schema version, extension identity, output CRS/axis convention, transformation
+metadata when applicable and exact DuckDB/Spatial versions. Record
 download provenance separately; `latest` provider URLs can change their content.
 The reader computes source identity even when no expected hash was supplied.
 
@@ -502,7 +575,7 @@ source table and effective profile catalogue for metadata when no feature rows e
 
 The first interface design covers native SQL access and the `osm2duckdb build`
 CLI, local snapshots, named-region acquisition, profile discovery, typed
-projection, feature diagnostics and materialization.
+projection, optional output reprojection, feature diagnostics and materialization.
 Profile configuration files, custom clipping, incremental updates, combined-profile
 single-pass builds and additional providers remain separate design work.
 
@@ -514,6 +587,7 @@ Before implementing this interface, resolve and verify:
 4. Bounded reference-resolution storage, source snapshot consistency and the measured cost of hashing and lineage.
 5. Source-manifest format and exact-version compatibility checks.
 6. Atomic SQL import in the caller's transaction, CLI database publication and shared-core equivalence between both interfaces.
+7. Offline CRS transformations, axis order, operation/grid selection, metadata capture and independently justified control-point tests.
 
 These are integration and design gates, not measured capabilities. There is no
 REST service in this design.
@@ -529,6 +603,6 @@ Official references used for this proposal:
 
 - [DuckDB Rust extension template](https://github.com/duckdb/extension-template-rs/tree/a679601f8e133db7546777c6637bc7a6c2d2780e): bind-time result columns and native extension lifecycle.
 - [DuckDB CALL](https://duckdb.org/docs/2.0/sql/statements/call), [CREATE TABLE](https://duckdb.org/docs/2.0/sql/statements/create_table) and [transactions](https://duckdb.org/docs/2.0/sql/statements/transactions): SQL invocation and materialization.
-- [DuckDB Spatial](https://duckdb.org/docs/2.0/core_extensions/spatial/overview) and [R-tree indexes](https://duckdb.org/docs/2.0/core_extensions/spatial/r-tree_indexes): geometry integration and indexing.
+- [DuckDB Spatial](https://duckdb.org/docs/2.0/core_extensions/spatial/overview), [ST_Transform](https://duckdb.org/docs/2.0/core_extensions/spatial/functions#st_transform) and [R-tree indexes](https://duckdb.org/docs/2.0/core_extensions/spatial/r-tree_indexes): geometry, coordinate transformations and indexing.
 - [Geofabrik technical documentation](https://download.geofabrik.de/technical.html) and [download catalogue](https://download.geofabrik.de/index-v1-nogeom.json): region IDs, snapshot URLs and extract semantics.
 - [OpenStreetMap copyright and license](https://www.openstreetmap.org/copyright): data origin, licensing and attribution.

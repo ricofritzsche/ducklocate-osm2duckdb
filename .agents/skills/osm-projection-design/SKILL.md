@@ -34,6 +34,9 @@ patterns rather than claiming to understand all OSM tags.
 
 - A closed way is not automatically an area. Interpret tags and relation semantics. Multipolygon reconstruction must account for outer/inner rings and member roles; see the [multipolygon documentation](https://wiki.openstreetmap.org/wiki/Relation:multipolygon).
 - State coordinate order, CRS, precision and any transformation. Keep source geometry separate from derived centroids, points on surface, simplified geometry and clipped output.
+- Coordinate reprojection is optional and independent of object profiles. Default output is EPSG:4326 in longitude/latitude XY order. Apply an explicitly selected target CRS through the shared SQL/CLI transformation path; keep source identity and feature IDs unchanged by the CRS choice alone.
+- Record source/output CRS, XY convention and the actual transformation/library/database/grid identities. Do not rely on a GEOMETRY value alone to preserve CRS provenance. No silent coordinate relabeling, fallback to source CRS or network grid acquisition during a local read.
+- Verify transformed coordinates against independent control points with stated tolerances. Test the default no-transform path, axis order, invalid CRS/resources and per-feature transformation failure in both error modes. Operation selection and accuracy policy must be explicit before declaring a CRS transformation supported.
 - Give every region selection an identifiable boundary/extract definition. Specify intersects/contains behavior and whether crossing features are retained whole or clipped. Record incomplete features at extract edges.
 - Record geometry repairs and their effects; do not silently replace invalid source geometry. Spatial containment or proximity is derived evidence, not an OSM-tagged relationship.
 - Administrative level numbers and hierarchies need regional interpretation. A roads profile does not imply routing topology, legal access or turn restrictions.

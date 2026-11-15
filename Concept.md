@@ -20,6 +20,7 @@ source restrictions, GridPin integration and HTTP architecture do not apply here
 - Native, open-source DuckDB extension, implemented in Rust and targeting DuckDB 2.0. Pin an exact compatible release when bootstrapping the build.
 - SQL and the osm2duckdb CLI are supported user interfaces. The CLI builds a DuckDB database from a region or local file and selected profiles. A server or REST API is not part of the product.
 - Support local OSM files and explicit downloads of named regions. Projection of a local file must not implicitly acquire or refresh data.
+- Support an optional output CRS consistently in SQL and CLI. Default to WGS84 longitude/latitude in XY order; explicit reprojection transforms geometry and records the output CRS, axis convention and transformation provenance. Source data and identifiers remain unchanged, and local reads stay offline.
 - A catalogue of versioned projection profiles describes datasets such as roads, buildings, administrative areas and points of interest. Barriers, settlements, landmarks, water, land use and infrastructure belong to the broader design catalogue.
 - Categories may overlap. One source object can contribute to several profiles; one projected object can depend on several source objects.
 - Built-in profiles establish a contract that can later support external configuration. A custom configuration language is not required to start.
@@ -47,6 +48,10 @@ geometry and coordinate conventions, normalization and units, missing-value
 semantics, relationships, quality rules and representative SQL queries. Region
 selection must state how intersecting features and references outside the region
 are handled. Spatial inference must remain identifiable as an inference.
+
+Object projection profiles and coordinate reprojection are distinct choices.
+Profiles define feature semantics; the requested output CRS defines the coordinate
+representation. Both interfaces share the same transformation behavior and metadata.
 
 ## Reproducibility and quality
 
@@ -90,7 +95,7 @@ Resolve these as concrete tasks need them, with a short rationale and evidence:
 - First profile and regional acceptance fixture; first measured real extract.
 - Review the proposed SQL signatures, CLI build contract, catalogue, materialization workflow and diagnostic row contract in README.md.
 - Named-region provider integration and exact extract semantics; Geofabrik is the proposed first provider.
-- Geometry representation, spatial-extension integration and index strategy.
+- Geometry representation, spatial-extension integration and index strategy; CRS operation selection, accuracy policy and metadata capture.
 - Table keys, shared source storage and dependency indexes.
 - External profile format and schema/profile compatibility policy.
 - Incremental updates, deletion handling and publication semantics.
