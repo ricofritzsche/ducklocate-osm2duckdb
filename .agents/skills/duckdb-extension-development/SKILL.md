@@ -12,7 +12,7 @@ for the exact targeted 2.0 release; record changes to the verified baseline.
 
 ## Native integration
 
-- The product is loaded into DuckDB and called through SQL. Do not implement the native extension as a subprocess wrapper around a standalone importer or HTTP service.
+- The native extension is loaded into DuckDB and called through SQL. It shares Rust projection code with the osm2duckdb CLI; do not implement it as a subprocess wrapper around that CLI or an HTTP service.
 - Start from a pinned revision of DuckDB's official Rust extension template and its CI tooling. Keep only the examples and targets needed for this extension. Template Wasm support is not an automatic product requirement.
 - DuckDB 2.0's C API v2 and the inspected Rust template require explicit compatibility care. Match the exact engine version, binding, API/entrypoint, platform metadata and test runner; do not silently downgrade to the geocoding project's 1.5 baseline.
 - Preserve the metadata-footer generation step. A cargo-built shared library renamed to .duckdb_extension is insufficient. Strip symbols, if desired, before footer generation, never afterwards.

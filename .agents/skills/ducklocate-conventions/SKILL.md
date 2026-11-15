@@ -12,7 +12,7 @@ task touches their contracts. Documentation tasks do not start a build milestone
 
 - Organize by responsibility: OSM decoding/reference resolution, profile rules, geometry, output construction and DuckDB integration. These are responsibilities, not mandatory top-level folders or separate crates.
 - Start with the smallest layout supported by the verified extension tooling. Add crates when dependency direction, testing or native entrypoint requirements justify them. Do not copy the geocoding application's single-package restriction or a reference project's stage-per-crate layout.
-- Keep each processing path visible. DuckDB callbacks translate SQL inputs and outputs; projection semantics live with their profile or operation. Keep I/O at the edges where pure rule functions make independent testing useful.
+- Keep each processing path visible. DuckDB callbacks and CLI parsing translate inputs and outputs; both use the same Rust projection implementation and profile/schema definitions. Keep projection semantics out of delivery bindings and I/O at the edges where pure rule functions make independent testing useful.
 - Streaming algorithms may borrow buffers and maintain local state. Do not require whole-input copies or a command/outcome framework for ordinary scalar or table-function callbacks.
 - Split files when responsibilities or tests obscure the processing path. Roughly 200 lines is a review signal, not a hard limit. Avoid catch-all services, managers, helpers and speculative plugin frameworks.
 
@@ -29,6 +29,7 @@ task touches their contracts. Documentation tasks do not start a build milestone
 
 - Write expected profile results from small source fixtures and a written derivation. Never regenerate acceptance answers from the implementation under test. Investigate disagreements before changing an expectation.
 - Test meaningful rules and risks: missing references, overlapping profiles, relation geometry, normalization failures, provenance, cancellation and SQL translation as applicable. Skip trivial getter tests and tests of file/module shape.
+- When both interfaces exist, compare CLI-built tables with SQL projection/import on the same source and effective versions. Check logical rows, schema, geometry, lineage and diagnostics; exclude timing and acquisition timestamps. Verify failure does not publish a partial database or table set.
 - Once a Cargo workspace exists, run cargo fmt --all --check, cargo test --workspace --locked and cargo clippy --workspace --all-targets --locked -- -D warnings for Rust changes. Add the applicable native build and SQL tests from the extension skill; Cargo success alone does not prove a loadable extension.
 - For documentation-only changes, validate skill frontmatter, relative links and the diff. Do not claim native or Cargo checks ran when there is no implementation.
 - Report exact commands and their results, including unavailable prerequisites or skipped cases. A missing input is not a passing integration test.

@@ -1,7 +1,8 @@
 # Ducklocate OSM to DuckDB
 
-An open-source native DuckDB extension written in Rust. It projects OpenStreetMap
-data into structured, queryable datasets. The target is DuckDB 2.0.
+An open-source native DuckDB extension written in Rust, with an osm2duckdb CLI.
+Both project OpenStreetMap data into structured, queryable datasets using shared
+Rust code and profile contracts. The target is DuckDB 2.0.
 
 ## Read before working
 
@@ -19,7 +20,7 @@ data into structured, queryable datasets. The target is DuckDB 2.0.
 - Write project documentation, code comments and public interfaces in English. Preserve literal source names, tags and identifiers.
 - Keep instructions focused: this file is the entry point; skills carry task-specific rules; Concept.md records product choices. Avoid duplicating them.
 - Keep implementation consistent with the concept. Report conflicts and record consequential design choices; do not silently rewrite requirements to fit code.
-- The product runs inside DuckDB. REST services, a standalone application and a routing engine are outside the current scope.
+- Support the native extension and osm2duckdb CLI through one Rust projection implementation. REST services, a GUI application and a routing engine are outside the current scope.
 - Keep files cohesive and split growing modules by responsibility. Add abstractions and crates for concrete needs.
 - Own routine setup and recovery within the requested task. Reuse verified caches and obtain missing tools or inputs when needed; documentation work does not start implementation or large downloads.
 - Keep source extracts, local databases, binaries and generated results outside Git. Small documented fixtures may be tracked.

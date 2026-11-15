@@ -4,8 +4,9 @@
 
 Ducklocate is an open-source native DuckDB extension written in Rust. It turns
 OpenStreetMap data into structured tables with typed attributes, geometries and
-source references. Users work through SQL inside DuckDB and select the region
-and datasets they need.
+source references. Users select the region and datasets through SQL inside
+DuckDB or the osm2duckdb CLI. Both interfaces share one Rust projection
+implementation and output contracts.
 
 The value is the documented interpretation of OSM into useful datasets: which
 objects are selected, how tags become fields, how geometries are reconstructed,
@@ -17,7 +18,8 @@ source restrictions, GridPin integration and HTTP architecture do not apply here
 ## Established direction
 
 - Native, open-source DuckDB extension, implemented in Rust and targeting DuckDB 2.0. Pin an exact compatible release when bootstrapping the build.
-- SQL is the user interface. A separate server or REST API is not part of the product.
+- SQL and the osm2duckdb CLI are supported user interfaces. The CLI builds a DuckDB database from a region or local file and selected profiles. A server or REST API is not part of the product.
+- Support local OSM files and explicit downloads of named regions. Projection of a local file must not implicitly acquire or refresh data.
 - A catalogue of versioned projection profiles describes datasets such as roads, buildings, administrative areas and points of interest. Barriers, settlements, landmarks, water, land use and infrastructure belong to the broader design catalogue.
 - Categories may overlap. One source object can contribute to several profiles; one projected object can depend on several source objects.
 - Built-in profiles establish a contract that can later support external configuration. A custom configuration language is not required to start.
@@ -67,13 +69,27 @@ Preserve source-to-output dependencies so updates can eventually identify affect
 features. Incremental update support requires its own specification and evidence;
 full snapshot rebuilds remain a valid initial implementation.
 
+## SQL and CLI design
+
+[README.md](README.md) is the user-facing SQL and CLI documentation and currently
+contains the interface proposal. SQL offers profile discovery, provider catalogue
+lookup, explicit downloads, local source inspection, profile reads and a convenience
+import operation. The CLI builds a database containing selected profile tables and
+source/profile metadata. Both interfaces use the same projection rules and snapshot
+identity. DuckDB owns catalogue and transaction behavior; native integration,
+atomic import and complete individual profile contracts remain unverified.
+
+Keep public signatures and examples in the README rather than duplicating them
+here. Design work may refine the proposal; record settled scope choices here and
+retain an explicit distinction between proposed behavior and implementation evidence.
+
 ## Open choices
 
 Resolve these as concrete tasks need them, with a short rationale and evidence:
 
 - First profile and regional acceptance fixture; first measured real extract.
-- SQL names and signatures, catalogue discovery and materialization workflow.
-- Input acquisition interface and region definitions.
+- Review the proposed SQL signatures, CLI build contract, catalogue, materialization workflow and diagnostic row contract in README.md.
+- Named-region provider integration and exact extract semantics; Geofabrik is the proposed first provider.
 - Geometry representation, spatial-extension integration and index strategy.
 - Table keys, shared source storage and dependency indexes.
 - External profile format and schema/profile compatibility policy.
@@ -81,6 +97,7 @@ Resolve these as concrete tasks need them, with a short rationale and evidence:
 - Rust binding and exact toolchain pins, crate layout and tested platforms.
 - Software license and community-distribution route. Software and OSM data licensing are separate.
 
-No SQL interface, supported-platform matrix or performance target has been fixed
-by this document. Public descriptions state the product's purpose; verified
-support and current limitations belong in development and release documentation.
+The README's SQL and CLI interfaces remain proposals. No supported-platform matrix or
+performance target has been fixed by this document. Public descriptions state
+the product's purpose; verified support and current limitations belong in
+development and release documentation.
