@@ -136,8 +136,10 @@ the runnable examples expand `$PWD` in the shell.
 
 ## Remaining limits
 
-Only local snapshot PBFs and roads 1.0.0 are implemented. No real/national extract
-performance, peak-memory measurement or broader-platform support is claimed.
+Only local snapshot PBFs and roads 1.0.0 are implemented. This synthetic milestone
+made no real-extract or peak-memory claim; the subsequent [Bremen evaluation](bremen-roads-evaluation.md)
+records a small real-input correctness and resource baseline. National-scale
+performance and broader-platform support remain unverified.
 The hard input/index/record limits deliberately reject some valid inputs. Rust
 buffers and the SQLite cache are outside DuckDB memory accounting. Abrupt process
 termination can leave OS temp files. Empty materializations need caller-retained

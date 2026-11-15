@@ -1,0 +1,84 @@
+{
+  "source_sha256": "fca9ea140a3fd8bd209b41774d9823fded54151543a0956112847f263b663410",
+  "ways": [
+    {
+      "id": 3999478, "version": 37,
+      "tags": {"highway": "secondary", "maxspeed": "50", "oneway": "yes"},
+      "speed_kmh": 50.0, "oneway": "forward", "closed": false, "issues": []
+    },
+    {
+      "id": 3999490, "version": 8,
+      "tags": {"highway": "residential", "maxspeed": "30", "maxspeed:type": "DE:zone30"},
+      "speed_kmh": null, "oneway": null, "closed": false,
+      "issues": [["unsupported_value", "maxspeed:type", "DE:zone30"]]
+    },
+    {
+      "id": 4000171, "version": 21,
+      "tags": {"highway": "unclassified", "maxspeed": "50"},
+      "speed_kmh": 50.0, "oneway": null, "closed": true, "issues": []
+    },
+    {
+      "id": 4000178, "version": 13,
+      "tags": {"highway": "residential", "maxspeed": "30", "oneway": "yes", "oneway:bicycle": "no"},
+      "speed_kmh": 30.0, "oneway": null, "closed": false,
+      "issues": [["unsupported_value", "oneway:bicycle", "no"]]
+    },
+    {
+      "id": 4000247, "version": 34,
+      "tags": {"highway": "path", "surface": "asphalt"},
+      "speed_kmh": null, "oneway": null, "closed": false, "issues": []
+    },
+    {
+      "id": 4003694, "version": 57,
+      "tags": {"highway": "secondary", "maxspeed": "50", "maxspeed:conditional": "30 @ (22:00-06:00)", "oneway": "yes"},
+      "speed_kmh": null, "oneway": "forward", "closed": false,
+      "issues": [["conditional_value", "maxspeed:conditional", "30 @ (22:00-06:00)"]]
+    },
+    {
+      "id": 4006412, "version": 24,
+      "tags": {"highway": "motorway", "maxspeed": "120", "maxspeed:variable": "signals", "oneway": "yes"},
+      "speed_kmh": null, "oneway": "forward", "closed": false,
+      "issues": [["unsupported_value", "maxspeed:variable", "signals"]]
+    },
+    {
+      "id": 4265275, "version": 20,
+      "tags": {"highway": "unclassified", "maxspeed": "50", "oneway": "no"},
+      "speed_kmh": 50.0, "oneway": "both", "closed": false, "issues": []
+    },
+    {
+      "id": 4280092, "version": 18,
+      "tags": {"highway": "tertiary", "maxspeed:backward": "50", "maxspeed:forward": "30"},
+      "speed_kmh": null, "oneway": null, "closed": false,
+      "issues": [["unsupported_value", "maxspeed:backward", "50"], ["unsupported_value", "maxspeed:forward", "30"]]
+    },
+    {
+      "id": 4308668, "version": 21,
+      "tags": {"highway": "trunk", "maxspeed": "none", "maxspeed:advisory": "40", "oneway": "yes"},
+      "speed_kmh": null, "oneway": "forward", "closed": false,
+      "issues": [["unsupported_value", "maxspeed:advisory", "40"]]
+    },
+    {
+      "id": 4351147, "version": 28,
+      "tags": {"highway": "primary", "maxspeed": "signals"},
+      "speed_kmh": null, "oneway": null, "closed": false,
+      "issues": [["unsupported_value", "maxspeed", "signals"]]
+    },
+    {
+      "id": 27644505, "version": 11,
+      "tags": {"highway": "service", "oneway": "-1"},
+      "speed_kmh": null, "oneway": "backward", "closed": false, "issues": []
+    },
+    {
+      "id": 524526965, "version": 6,
+      "tags": {"highway": "residential", "maxspeed": "30", "oneway": "alternating"},
+      "speed_kmh": 30.0, "oneway": null, "closed": false,
+      "issues": [["unsupported_value", "oneway", "alternating"]]
+    },
+    {
+      "id": 1153729931, "version": 3,
+      "tags": {"highway": "service", "maxspeed": "walk", "oneway": "yes"},
+      "speed_kmh": null, "oneway": "forward", "closed": false,
+      "issues": [["unsupported_value", "maxspeed", "walk"]]
+    }
+  ]
+}

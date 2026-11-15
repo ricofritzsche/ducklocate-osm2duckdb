@@ -13,6 +13,7 @@ inspection, convenience import, CLI and updates remain proposals.
 
 - [Roads contract: selection, schema, diagnostics and limits](docs/roads-v1.md)
 - [Roads milestone verification](docs/roads-verification.md)
+- [Real Bremen roads evaluation and resource baseline](docs/bremen-roads-evaluation.md)
 - [Native foundation and CRS provenance limits](docs/native-foundation.md)
 - [Concept and future scope](Concept.md)
 
@@ -219,6 +220,27 @@ leave files for OS/manual cleanup. The pinned C API context cannot poll
 cancellation; bounded snapshot/index preparation may delay interruption until
 its callback returns. Full limits, supported PBF encodings and lifecycle details
 are in the [roads contract](docs/roads-v1.md#execution-security-and-resource-limits).
+
+## Pinned real-input example
+
+After explicitly acquiring the [documented Bremen snapshot](docs/bremen-roads-evaluation.md#source-and-acquisition),
+run this from the repository root with DuckDB 2.0.0 and the release build:
+
+```sh
+duckdb -unsigned <<SQL
+LOAD '$PWD/build/release/ducklocate.duckdb_extension';
+SELECT status, count(*) AS ways
+FROM ducklocate_read('/private/tmp/ducklocate-bremen-20261115/bremen-261114.osm.pbf',
+  expected_sha256 := 'fca9ea140a3fd8bd209b41774d9823fded54151543a0956112847f263b663410',
+  on_error := 'report')
+GROUP BY status;
+SQL
+```
+
+Expected: `ok`, `72749`. The [opt-in evaluator](docs/bremen-roads-evaluation.md#reproduce-the-evaluation)
+checks every selected ID, source version, tag, ordered vertex and lineage entry,
+then persistence, deterministic reads, diagnostics and EPSG:3857. Normal tests
+continue to use the synthetic rule fixtures and never download real extracts.
 
 ## Future interface proposals
 

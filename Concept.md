@@ -100,7 +100,7 @@ retain an explicit distinction between proposed behavior and implementation evid
 
 Resolve these as concrete tasks need them, with a short rationale and evidence:
 
-- First measured real extract; regional and scale acceptance beyond the synthetic roads fixtures.
+- Regional and scale acceptance beyond the [measured Bremen roads extract](docs/bremen-roads-evaluation.md); this small extract does not establish national-scale support.
 - Extend the implemented reader/catalogue and roads diagnostic contract deliberately; review remaining proposed SQL and CLI interfaces in README.md.
 - Named-region provider integration and exact extract semantics; Geofabrik is the proposed first provider.
 - Geometry representation, spatial-extension integration and index strategy; CRS operation selection, accuracy policy and metadata capture.
